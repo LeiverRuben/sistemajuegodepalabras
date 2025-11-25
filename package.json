@@ -9,7 +9,8 @@
     "start": "next start"
   },
   "dependencies": {
-    "@capacitor/core": "latest",
+    "@capacitor/cli": "^7.4.2",
+    "@capacitor/core": "^7.4.2",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",

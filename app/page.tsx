@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Volume2, Star, Trophy, RefreshCw, ArrowLeft, Mail, Lock, LogOut, User, Database } from "lucide-react"
+import { Trophy, ArrowLeft, Mail, Lock, LogOut, User, Database } from "lucide-react"
 
 // Tipos de datos
 interface Word {
@@ -13,6 +12,7 @@ interface Word {
   incomplete: string
   syllable: string
   image: string
+  category: string
 }
 
 interface UserData {
@@ -34,6 +34,11 @@ interface GameSession {
 }
 
 type GameStatus = "playing" | "correct" | "wrong" | "gameOver" | "completed"
+type SyllableCategory = "K" | "R" | "D" | "J" | "G" | "GR" | "DR" | "FR" | "CR" | "TR" | "BR" | "PR" | "ALL"
+
+const isGameStatus = (status: GameStatus, target: GameStatus): boolean => {
+  return status === target
+}
 
 // Simulación de Capacitor Preferences para desarrollo web
 const CapacitorPreferences = {
@@ -44,19 +49,16 @@ const CapacitorPreferences = {
     }
     return { value: null }
   },
-
   async set(options: { key: string; value: string }) {
     if (typeof window !== "undefined") {
       localStorage.setItem(`tablet_storage_${options.key}`, options.value)
     }
   },
-
   async remove(options: { key: string }) {
     if (typeof window !== "undefined") {
       localStorage.removeItem(`tablet_storage_${options.key}`)
     }
   },
-
   async keys() {
     if (typeof window !== "undefined") {
       const keys = Object.keys(localStorage)
@@ -66,7 +68,6 @@ const CapacitorPreferences = {
     }
     return { keys: [] }
   },
-
   async clear() {
     if (typeof window !== "undefined") {
       const keys = Object.keys(localStorage).filter((key) => key.startsWith("tablet_storage_"))
@@ -75,67 +76,196 @@ const CapacitorPreferences = {
   },
 }
 
-// Datos del juego de sílabas
-const words: Word[] = [
-  { complete: "KIWI", incomplete: "_WI", syllable: "KI", image: "🥝" },
-  { complete: "KARATE", incomplete: "_RATE", syllable: "KA", image: "🥋" },
-  { complete: "KOALA", incomplete: "_ALA", syllable: "KO", image: "🐨" },
-  { complete: "RANA", incomplete: "_NA", syllable: "RA", image: "🐸" },
-  { complete: "REMO", incomplete: "_MO", syllable: "RE", image: "🚣" },
-  { complete: "RICO", incomplete: "_CO", syllable: "RI", image: "💰" },
-  { complete: "ROSA", incomplete: "_SA", syllable: "RO", image: "🌹" },
-  { complete: "RUTA", incomplete: "_TA", syllable: "RU", image: "🗺️" },
-  { complete: "DADO", incomplete: "_DO", syllable: "DA", image: "🎲" },
-  { complete: "DEDO", incomplete: "_DO", syllable: "DE", image: "👆" },
-  { complete: "DIENTE", incomplete: "_ENTE", syllable: "DI", image: "🦷" },
-  { complete: "DONA", incomplete: "_NA", syllable: "DO", image: "🍩" },
-  { complete: "DUCHA", incomplete: "_CHA", syllable: "DU", image: "🚿" },
-  { complete: "JARRA", incomplete: "_RRA", syllable: "JA", image: "🏺" },
-  { complete: "JEFE", incomplete: "_FE", syllable: "JE", image: "👨‍💼" },
-  { complete: "JIRAFA", incomplete: "_RAFA", syllable: "JI", image: "🦒" },
-  { complete: "JOYA", incomplete: "_YA", syllable: "JO", image: "💎" },
-  { complete: "JUGO", incomplete: "_GO", syllable: "JU", image: "🧃" },
-  { complete: "GATO", incomplete: "_TO", syllable: "GA", image: "🐱" },
-  { complete: "GENTE", incomplete: "_NTE", syllable: "GE", image: "👥" },
-  { complete: "GIGANTE", incomplete: "_GANTE", syllable: "GI", image: "🏔️" },
-  { complete: "GOMA", incomplete: "_MA", syllable: "GO", image: "🔴" },
-  { complete: "GUSANO", incomplete: "_SANO", syllable: "GU", image: "🐛" },
-  { complete: "GRANDE", incomplete: "_ANDE", syllable: "GR", image: "📏" },
-  { complete: "DRAGÓN", incomplete: "_AGÓN", syllable: "DR", image: "🐉" },
+// Datos del juego de sílabas organizados por categorías
+const allWords: Word[] = [
+  // Palabras con K
+  { complete: "KIWI", incomplete: "_WI", syllable: "KI", image: "🥝", category: "K" },
+  { complete: "KARATE", incomplete: "_RATE", syllable: "KA", image: "🥋", category: "K" },
+  { complete: "KOALA", incomplete: "_ALA", syllable: "KO", image: "🐨", category: "K" },
+  { complete: "KILO", incomplete: "_LO", syllable: "KI", image: "⚖️", category: "K" },
+  { complete: "KAYAK", incomplete: "_YAK", syllable: "KA", image: "🛶", category: "K" },
+
+  // Palabras con R
+  { complete: "RANA", incomplete: "_NA", syllable: "RA", image: "🐸", category: "R" },
+  { complete: "REMO", incomplete: "_MO", syllable: "RE", image: "🚣", category: "R" },
+  { complete: "RICO", incomplete: "_CO", syllable: "RI", image: "💰", category: "R" },
+  { complete: "ROSA", incomplete: "_SA", syllable: "RO", image: "🌹", category: "R" },
+  { complete: "RUTA", incomplete: "_TA", syllable: "RU", image: "🗺️", category: "R" },
+  { complete: "RADIO", incomplete: "_DIO", syllable: "RA", image: "📻", category: "R" },
+  { complete: "RELOJ", incomplete: "_LOJ", syllable: "RE", image: "⏰", category: "R" },
+
+  // Palabras con D
+  { complete: "DADO", incomplete: "_DO", syllable: "DA", image: "🎲", category: "D" },
+  { complete: "DEDO", incomplete: "_DO", syllable: "DE", image: "👆", category: "D" },
+  { complete: "DIENTE", incomplete: "_ENTE", syllable: "DI", image: "🦷", category: "D" },
+  { complete: "DONA", incomplete: "_NA", syllable: "DO", image: "🍩", category: "D" },
+  { complete: "DUCHA", incomplete: "_CHA", syllable: "DU", image: "🚿", category: "D" },
+  { complete: "DINERO", incomplete: "_NERO", syllable: "DI", image: "💵", category: "D" },
+
+  // Palabras con J
+  { complete: "JARRA", incomplete: "_RRA", syllable: "JA", image: "🏺", category: "J" },
+  { complete: "JEFE", incomplete: "_FE", syllable: "JE", image: "👨‍💼", category: "J" },
+  { complete: "JIRAFA", incomplete: "_RAFA", syllable: "JI", image: "🦒", category: "J" },
+  { complete: "JOYA", incomplete: "_YA", syllable: "JO", image: "💎", category: "J" },
+  { complete: "JUGO", incomplete: "_GO", syllable: "JU", image: "🧃", category: "J" },
+  { complete: "JARDIN", incomplete: "_RDIN", syllable: "JA", image: "🌻", category: "J" },
+
+  // Palabras con G
+  { complete: "GATO", incomplete: "_TO", syllable: "GA", image: "🐱", category: "G" },
+  { complete: "GENTE", incomplete: "_NTE", syllable: "GE", image: "👥", category: "G" },
+  { complete: "GIGANTE", incomplete: "_GANTE", syllable: "GI", image: "🏔️", category: "G" },
+  { complete: "GOMA", incomplete: "_MA", syllable: "GO", image: "🔴", category: "G" },
+  { complete: "GUSANO", incomplete: "_SANO", syllable: "GU", image: "🐛", category: "G" },
+  { complete: "GLOBO", incomplete: "_OBO", syllable: "GL", image: "🎈", category: "G" },
+
+  // Palabras con GR
+  { complete: "GRANDE", incomplete: "_ANDE", syllable: "GR", image: "📏", category: "GR" },
+  { complete: "GRILLO", incomplete: "_ILLO", syllable: "GR", image: "🦗", category: "GR" },
+  { complete: "GRUPO", incomplete: "_UPO", syllable: "GR", image: "👥", category: "GR" },
+  { complete: "GRANJA", incomplete: "_ANJA", syllable: "GR", image: "🚜", category: "GR" },
+
+  // Palabras con DR
+  { complete: "DRAGÓN", incomplete: "_AGÓN", syllable: "DR", image: "🐉", category: "DR" },
+  { complete: "DRAMA", incomplete: "_AMA", syllable: "DR", image: "🎭", category: "DR" },
+  { complete: "DROGA", incomplete: "_OGA", syllable: "DR", image: "💊", category: "DR" },
+  // Palabras con FR (trabadas)
+  { complete: "FRUTA", incomplete: "_UTA", syllable: "FR", image: "🍎", category: "FR" },
+  { complete: "FRIO", incomplete: "_IO", syllable: "FR", image: "🧊", category: "FR" },
+  { complete: "FRESA", incomplete: "_ESA", syllable: "FR", image: "🍓", category: "FR" },
+  { complete: "FRENO", incomplete: "_ENO", syllable: "FR", image: "🛑", category: "FR" },
+
+  // Palabras con CR (trabadas)
+  { complete: "CRUZ", incomplete: "_UZ", syllable: "CR", image: "✝️", category: "CR" },
+  { complete: "CREMA", incomplete: "_EMA", syllable: "CR", image: "🧴", category: "CR" },
+  { complete: "CRISTAL", incomplete: "_ISTAL", syllable: "CR", image: "💎", category: "CR" },
+  { complete: "CRUDO", incomplete: "_UDO", syllable: "CR", image: "🥩", category: "CR" },
+
+  // Palabras con TR (trabadas)
+  { complete: "TREN", incomplete: "_EN", syllable: "TR", image: "🚂", category: "TR" },
+  { complete: "TRES", incomplete: "_ES", syllable: "TR", image: "3️⃣", category: "TR" },
+  { complete: "TRIGO", incomplete: "_IGO", syllable: "TR", image: "🌾", category: "TR" },
+  { complete: "TRUENO", incomplete: "_UENO", syllable: "TR", image: "⚡", category: "TR" },
+
+  // Palabras con BR (trabadas)
+  { complete: "BRAZO", incomplete: "_AZO", syllable: "BR", image: "💪", category: "BR" },
+  { complete: "BRUJA", incomplete: "_UJA", syllable: "BR", image: "🧙‍♀️", category: "BR" },
+  { complete: "BRILLO", incomplete: "_ILLO", syllable: "BR", image: "✨", category: "BR" },
+  { complete: "BRAVO", incomplete: "_AVO", syllable: "BR", image: "👏", category: "BR" },
+
+  // Palabras con PR (trabadas)
+  { complete: "PRIMO", incomplete: "_IMO", syllable: "PR", image: "👦", category: "PR" },
+  { complete: "PRECIO", incomplete: "_ECIO", syllable: "PR", image: "💰", category: "PR" },
+  { complete: "PRISA", incomplete: "_ISA", syllable: "PR", image: "🏃", category: "PR" },
+  { complete: "PROBLEMA", incomplete: "_OBLEMA", syllable: "PR", image: "❓", category: "PR" },
 ]
 
-const syllableOptions = [
-  "KI",
-  "KA",
-  "KO",
-  "RA",
-  "RE",
-  "RI",
-  "RO",
-  "RU",
-  "DA",
-  "DE",
-  "DI",
-  "DO",
-  "DU",
-  "JA",
-  "JE",
-  "JI",
-  "JO",
-  "JU",
-  "GA",
-  "GE",
-  "GI",
-  "GO",
-  "GU",
-  "GR",
-  "DR",
+// 20 palabras para la sopa de letras con sílabas trabadas
+const wordSearchWords = [
+  "PLATO",
+  "BLANCO",
+  "CLASE",
+  "FLOR",
+  "GLOBO",
+  "BRAZO",
+  "DRAGON",
+  "FRUTA",
+  "TREN",
+  "CRUZ",
+  "PRIMO",
+  "BRUJA",
+  "FRIO",
+  "TRES",
+  "CREMA",
+  "PLUMA",
+  "BLUSA",
+  "CLAVO",
+  "FLACO",
+  "GRILLO",
 ]
+
+const wordSearchIcons: { [key: string]: string } = {
+  PLATO: "🍽️",
+  BLANCO: "⚪",
+  CLASE: "🏫",
+  FLOR: "🌸",
+  GLOBO: "🎈",
+  BRAZO: "💪",
+  DRAGON: "🐉",
+  FRUTA: "🍎",
+  TREN: "🚂",
+  CRUZ: "✝️",
+  PRIMO: "👦",
+  BRUJA: "🧙‍♀️",
+  FRIO: "🧊",
+  TRES: "3️⃣",
+  CREMA: "🧴",
+  PLUMA: "🪶",
+  BLUSA: "👕",
+  CLAVO: "🔨",
+  FLACO: "🧍‍♂️",
+  GRILLO: "🦗",
+}
+
+// Cuadrícula de sopa de letras 20x20 con las 20 palabras únicas en horizontal, vertical y diagonal
+const wordSearchGrid = [
+  ["P", "L", "A", "T", "O", "M", "Q", "Z", "K", "L", "H", "N", "L", "X", "Y", "D", "F", "A", "C", "E"],
+  ["B", "X", "F", "H", "N", "R", "S", "T", "V", "I", "A", "L", "U", "M", "A", "O", "R", "E", "A", "G"],
+  ["L", "A", "N", "C", "O", "L", "O", "Y", "A", "W", "G", "R", "A", "Z", "O", "R", "S", "A", "F", "T"],
+  ["A", "M", "Q", "W", "D", "A", "D", "O", "P", "I", "U", "F", "R", "I", "O", "L", "C", "D", "G", "R"],
+  ["N", "F", "H", "B", "O", "K", "L", "M", "N", "C", "T", "Q", "U", "U", "M", "A", "N", "M", "E", "A"],
+  ["C", "L", "A", "S", "E", "E", "W", "E", "R", "X", "Y", "U", "T", "S", "G", "A", "A", "T", "N", "M"],
+  ["O", "L", "O", "R", "A", "G", "G", "H", "E", "Z", "I", "O", "P", "A", "H", "G", "L", "O", "B", "O"],
+  ["F", "O", "C", "D", "K", "P", "Q", "T", "M", "Y", "T", "R", "E", "N", "E", "W", "U", "Q", "H", "I"],
+  ["L", "R", "J", "L", "D", "U", "N", "A", "O", "V", "W", "X", "C", "E", "S", "S", "H", "D", "J", "K"],
+  ["O", "Q", "R", "S", "T", "E", "V", "W", "X", "Z", "A", "C", "S", "R", "U", "M", "I", "C", "A", "R"],
+  ["R", "B", "R", "A", "Z", "O", "P", "M", "L", "K", "S", "D", "R", "E", "W", "Q", "X", "A", "S", "P"],
+  ["G", "L", "O", "B", "O", "T", "R", "E", "N", "F", "R", "U", "T", "A", "T", "I", "Y", "L", "B", "O"],
+  ["D", "R", "A", "G", "O", "N", "T", "R", "E", "S", "D", "E", "F", "U", "E", "R", "A", "U", "Y", "N"],
+  ["P", "R", "I", "M", "O", "B", "R", "U", "J", "A", "F", "E", "S", "N", "X", "A", "S", "A", "Z", "Ñ"],
+  ["C", "R", "E", "M", "A", "P", "L", "U", "M", "A", "T", "H", "R", "E", "H", "I", "O", "N", "B", "O"],
+  ["B", "L", "U", "S", "A", "I", "J", "X", "K", "W", "T", "D", "T", "R", "U", "N", "K", "G", "U", "G"],
+  ["C", "L", "A", "V", "O", "B", "R", "I", "L", "L", "O", "C", "W", "E", "T", "Y", "U", "S", "E", "T"],
+  ["F", "L", "A", "C", "O", "L", "Q", "B", "F", "H", "J", "K", "L", "Ñ", "Z", "X", "C", "V", "B", "N"],
+  ["M", "P", "O", "I", "U", "Y", "T", "R", "E", "W", "Q", "A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  ["G", "R", "I", "L", "L", "O", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ", "Z", "X", "C", "V", "Z", "L", "K", "K", "J"]
+];
+
+
+// Posiciones de las palabras en la cuadrícula (para referencia)
+const wordPositions = {
+  // Horizontales (10)
+  PLATO: { start: [0, 0], end: [0, 4], direction: "horizontal" },
+  BLANCO: { start: [1, 1], end: [1, 6], direction: "horizontal" },
+  BRAZO: { start: [2, 10], end: [2, 14], direction: "horizontal" },
+  FRIO: { start: [3, 11], end: [3, 14], direction: "horizontal" },
+  CLASE: { start: [5, 0], end: [5, 4], direction: "horizontal" },
+  GLOBO: { start: [6, 15], end: [6, 19], direction: "horizontal" },
+  TREN: { start: [7, 11], end: [7, 14], direction: "horizontal" },
+  FRUTA: { start: [11, 11], end: [11, 15], direction: "horizontal" },
+  TRES: { start: [12, 7], end: [12, 10], direction: "horizontal" },
+  PRIMO: { start: [13, 0], end: [13, 4], direction: "horizontal" },
+
+  // Verticales (5)
+  BLUSA: { start: [14, 0], end: [18, 0], direction: "vertical" },
+  CREMA: { start: [14, 1], end: [18, 1], direction: "vertical" },
+  PLUMA: { start: [14, 6], end: [18, 6], direction: "vertical" },
+  CLAVO: { start: [16, 0], end: [16, 4], direction: "horizontal" },
+  FLACO: { start: [17, 0], end: [17, 4], direction: "horizontal" },
+
+  // Diagonales (5)
+  BRUJA: { start: [13, 5], end: [17, 9], direction: "diagonal-down-right" },
+  DRAGON: { start: [12, 1], end: [7, 6], direction: "diagonal-up-left" },
+  PLUMA_ALT: { start: [14, 5], end: [14, 9], direction: "horizontal" },
+  GLOBO_ALT: { start: [6, 1], end: [10, 5], direction: "diagonal-down-right" },
+  GRILLO: { start: [19, 0], end: [19, 5], direction: "horizontal" }
+};
+
+
 
 export default function SistemaEducativo() {
   // Estados principales
   const [currentScreen, setCurrentScreen] = useState<
-    "login" | "register" | "menu" | "syllableGame" | "wordSearch" | "storage"
+    "login" | "register" | "menu" | "syllableGame" | "syllableSelection" | "wordSearch" | "storage"
   >("login")
   const [currentUser, setCurrentUser] = useState<UserData | null>(null)
   const [users, setUsers] = useState<UserData[]>([])
@@ -152,13 +282,15 @@ export default function SistemaEducativo() {
   })
 
   // Estados del juego de sílabas
+  const [selectedCategory, setSelectedCategory] = useState<SyllableCategory>("ALL")
+  const [filteredWords, setFilteredWords] = useState<Word[]>(allWords)
   const [currentWordIndex, setCurrentWordIndex] = useState(0)
   const [score, setScore] = useState(0)
   const [lives, setLives] = useState(3)
   const [selectedSyllable, setSelectedSyllable] = useState("")
   const [gameStatus, setGameStatus] = useState<GameStatus>("playing")
   const [streak, setStreak] = useState(0)
-  const [timeLeft, setTimeLeft] = useState(60)
+  const [timeLeft, setTimeLeft] = useState(120) // Cambiado a 120 segundos
   const [gameStarted, setGameStarted] = useState(false)
   const [options, setOptions] = useState<string[]>([])
   const [gameStartTime, setGameStartTime] = useState<number>(0)
@@ -168,13 +300,41 @@ export default function SistemaEducativo() {
   const [wordSearchScore, setWordSearchScore] = useState(0)
   const [wordSearchStarted, setWordSearchStarted] = useState(false)
   const [selectedCells, setSelectedCells] = useState<string[]>([])
+  const [currentSelection, setCurrentSelection] = useState("")
+  const [wordSearchLives, setWordSearchLives] = useState(3)
+  const [wordSearchStreak, setWordSearchStreak] = useState(0)
+  const [attempts, setAttempts] = useState(0)
+  const [foundWordCells, setFoundWordCells] = useState<string[]>([])
 
-  const currentWord = words[currentWordIndex]
-  const progress = ((currentWordIndex + 1) / words.length) * 100
+  const currentWord = filteredWords[currentWordIndex]
+  const progress = filteredWords.length > 0 ? ((currentWordIndex + 1) / filteredWords.length) * 100 : 0
+
+  // Filtrar palabras por categoría
+  useEffect(() => {
+    if (selectedCategory === "ALL") {
+      setFilteredWords(allWords)
+    } else {
+      setFilteredWords(allWords.filter((word) => word.category === selectedCategory))
+    }
+    setCurrentWordIndex(0)
+  }, [selectedCategory])
+
+  // Generar opciones para el juego de sílabas
+  useEffect(() => {
+    if (currentWord) {
+      const correctSyllable = currentWord.syllable
+      const allSyllables = Array.from(new Set(allWords.map((w) => w.syllable)))
+      const wrongOptions = allSyllables
+        .filter((s) => s !== correctSyllable)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+
+      const allOptions = [correctSyllable, ...wrongOptions].sort(() => Math.random() - 0.5)
+      setOptions(allOptions)
+    }
+  }, [currentWord])
 
   // 🗄️ FUNCIONES DE ALMACENAMIENTO LOCAL NATIVO
-
-  // Cargar usuarios del almacenamiento nativo
   const loadUsersFromStorage = async () => {
     try {
       const result = await CapacitorPreferences.get({ key: "users_data" })
@@ -188,7 +348,6 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Guardar usuarios en almacenamiento nativo
   const saveUsersToStorage = async (usersData: UserData[]) => {
     try {
       await CapacitorPreferences.set({
@@ -201,7 +360,6 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Cargar usuario actual
   const loadCurrentUserFromStorage = async () => {
     try {
       const result = await CapacitorPreferences.get({ key: "current_user" })
@@ -216,7 +374,6 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Guardar usuario actual
   const saveCurrentUserToStorage = async (userData: UserData) => {
     try {
       await CapacitorPreferences.set({
@@ -229,7 +386,6 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Cargar sesiones de juego
   const loadGameSessionsFromStorage = async () => {
     try {
       const result = await CapacitorPreferences.get({ key: "game_sessions" })
@@ -243,7 +399,6 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Guardar sesión de juego
   const saveGameSessionToStorage = async (session: GameSession) => {
     try {
       const currentSessions = [...gameSessions, session]
@@ -258,12 +413,10 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Obtener información de almacenamiento
   const getStorageInfo = async () => {
     try {
       const keysResult = await CapacitorPreferences.keys()
       const storageData: any = {}
-
       for (const key of keysResult.keys) {
         const result = await CapacitorPreferences.get({ key })
         if (result.value) {
@@ -274,21 +427,18 @@ export default function SistemaEducativo() {
           }
         }
       }
-
       setStorageInfo({
         totalKeys: keysResult.keys.length,
         keys: keysResult.keys,
         data: storageData,
         lastUpdated: new Date().toLocaleString(),
       })
-
       console.log("📊 Información de almacenamiento:", storageData)
     } catch (error) {
       console.error("❌ Error obteniendo info de almacenamiento:", error)
     }
   }
 
-  // Limpiar todo el almacenamiento
   const clearAllStorage = async () => {
     if (confirm("⚠️ ¿Estás seguro? Esto eliminará TODOS los datos guardados en la tablet.")) {
       try {
@@ -315,171 +465,74 @@ export default function SistemaEducativo() {
       await loadGameSessionsFromStorage()
       await getStorageInfo()
     }
-
     initializeApp()
   }, [])
 
-  // Timer del juego
+  // Timer del juego - CAMBIAR LÓGICA
   useEffect(() => {
     if (gameStarted && gameStatus === "playing" && timeLeft > 0 && currentScreen === "syllableGame") {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000)
       return () => clearTimeout(timer)
-    } else if (timeLeft === 0 && gameStatus === "playing") {
-      handleWrongAnswer()
+    } else if (timeLeft === 0 && gameStatus === "playing" && currentScreen === "syllableGame") {
+      // TIEMPO AGOTADO - TERMINAR INMEDIATAMENTE
+      setGameStatus("gameOver")
+      saveGameStats()
+      speakWord("Tiempo agotado")
     }
   }, [timeLeft, gameStatus, gameStarted, currentScreen])
-
-  // Generar opciones de sílabas
-  useEffect(() => {
-    if (currentWord && currentScreen === "syllableGame") {
-      const correctSyllable = currentWord.syllable
-      const wrongOptions = syllableOptions
-        .filter((s) => s !== correctSyllable)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
-      setOptions([correctSyllable, ...wrongOptions].sort(() => Math.random() - 0.5))
-    }
-  }, [currentWordIndex, currentScreen])
-
-  // Funciones de autenticación
-  const handleRegister = async () => {
-    const { username, email, password, confirmPassword } = registerForm
-
-    if (!username || !email || !password) {
-      alert("Por favor completa todos los campos")
-      return
-    }
-
-    if (password !== confirmPassword) {
-      alert("Las contraseñas no coinciden")
-      return
-    }
-
-    if (password.length < 4) {
-      alert("La contraseña debe tener al menos 4 caracteres")
-      return
-    }
-
-    if (users.find((u) => u.username === username)) {
-      alert("Este nombre de usuario ya existe")
-      return
-    }
-
-    const newUser: UserData = {
-      username,
-      email,
-      password,
-      registeredAt: new Date().toISOString(),
-      gamesPlayed: 0,
-      bestScore: 0,
-      lastPlayed: new Date().toISOString(),
-      totalTimeSpent: 0,
-    }
-
-    const updatedUsers = [...users, newUser]
-    setUsers(updatedUsers)
-    await saveUsersToStorage(updatedUsers)
-
-    alert("¡Registro exitoso! 🎉 Datos guardados en la tablet")
-    setCurrentScreen("login")
-    setRegisterForm({ username: "", email: "", password: "", confirmPassword: "" })
-  }
-
-  const handleLogin = async () => {
-    const { username, password } = loginForm
-
-    if (!username || !password) {
-      alert("Por favor ingresa usuario y contraseña")
-      return
-    }
-
-    const user = users.find((u) => u.username === username && u.password === password)
-    if (!user) {
-      alert("Usuario o contraseña incorrectos")
-      return
-    }
-
-    // Actualizar última vez jugado
-    const updatedUser = { ...user, lastPlayed: new Date().toISOString() }
-    const updatedUsers = users.map((u) => (u.username === username ? updatedUser : u))
-
-    setUsers(updatedUsers)
-    setCurrentUser(updatedUser)
-    await saveUsersToStorage(updatedUsers)
-    await saveCurrentUserToStorage(updatedUser)
-
-    setCurrentScreen("menu")
-    setLoginForm({ username: "", password: "" })
-    alert(`¡Bienvenido ${username}! 🎉 Datos cargados desde la tablet`)
-  }
-
-  const handleLogout = async () => {
-    if (confirm("¿Estás seguro que quieres cerrar sesión?")) {
-      try {
-        await CapacitorPreferences.remove({ key: "current_user" })
-        setCurrentUser(null)
-        setCurrentScreen("login")
-        console.log("👋 Sesión cerrada")
-      } catch (error) {
-        console.error("❌ Error cerrando sesión:", error)
-      }
-    }
-  }
 
   // Funciones del juego de sílabas
   const handleSyllableSelect = (syllable: string) => {
     if (gameStatus !== "playing") return
-
     setSelectedSyllable(syllable)
+
+    // Crear la palabra completa reemplazando el guión bajo
+    const completedWord = currentWord.incomplete.replace("_", syllable)
 
     if (syllable === currentWord.syllable) {
       setGameStatus("correct")
       setScore(score + 10 + streak * 2)
       setStreak(streak + 1)
       speakWord("¡Correcto!")
-
       setTimeout(() => {
-        if (currentWordIndex < words.length - 1) {
+        if (currentWordIndex < filteredWords.length - 1) {
           nextWord()
         } else {
           setGameStatus("completed")
           saveGameStats()
         }
-      }, 1500)
+      }, 2000)
     } else {
-      handleWrongAnswer()
-    }
-  }
+      const newLives = lives - 1
+      setLives(newLives)
+      setStreak(0)
 
-  const handleWrongAnswer = () => {
-    setGameStatus("wrong")
-    setLives(lives - 1)
-    setStreak(0)
-    speakWord("Inténtalo de nuevo")
-
-    setTimeout(() => {
-      if (lives - 1 <= 0) {
+      if (newLives <= 0) {
+        // SIN VIDAS - TERMINAR INMEDIATAMENTE
         setGameStatus("gameOver")
         saveGameStats()
+        speakWord("Juego terminado")
       } else {
-        setGameStatus("playing")
-        setSelectedSyllable("")
-        setTimeLeft(60)
+        setGameStatus("wrong")
+        speakWord("Inténtalo de nuevo")
+        setTimeout(() => {
+          setGameStatus("playing")
+          setSelectedSyllable("")
+        }, 2000)
       }
-    }, 1500)
+    }
   }
 
   const nextWord = () => {
     setCurrentWordIndex(currentWordIndex + 1)
     setSelectedSyllable("")
     setGameStatus("playing")
-    setTimeLeft(60)
+    // NO resetear timeLeft - mantener el timer global
   }
 
   const saveGameStats = async () => {
     if (currentUser) {
       const timeSpent = Math.floor((Date.now() - gameStartTime) / 1000)
-
       const updatedUser = {
         ...currentUser,
         gamesPlayed: currentUser.gamesPlayed + 1,
@@ -487,24 +540,20 @@ export default function SistemaEducativo() {
         lastPlayed: new Date().toISOString(),
         totalTimeSpent: (currentUser.totalTimeSpent || 0) + timeSpent,
       }
-
       const updatedUsers = users.map((u) => (u.username === currentUser.username ? updatedUser : u))
       setUsers(updatedUsers)
       setCurrentUser(updatedUser)
 
-      // Guardar en almacenamiento nativo
       await saveUsersToStorage(updatedUsers)
       await saveCurrentUserToStorage(updatedUser)
 
-      // Guardar sesión de juego
       const gameSession: GameSession = {
         date: new Date().toISOString(),
         score,
-        wordsCompleted: gameStatus === "completed" ? words.length : currentWordIndex,
+        wordsCompleted: gameStatus === "completed" ? filteredWords.length : currentWordIndex,
         gameType: "syllables",
       }
       await saveGameSessionToStorage(gameSession)
-
       console.log("💾 Estadísticas guardadas en tablet")
     }
   }
@@ -516,7 +565,7 @@ export default function SistemaEducativo() {
     setSelectedSyllable("")
     setGameStatus("playing")
     setStreak(0)
-    setTimeLeft(60)
+    setTimeLeft(120) // Timer global de 120 segundos
     setGameStarted(true)
     setGameStartTime(Date.now())
   }
@@ -524,8 +573,9 @@ export default function SistemaEducativo() {
   const startSyllableGame = () => {
     setGameStarted(true)
     setGameStatus("playing")
-    setTimeLeft(60)
+    setTimeLeft(120) // Timer global de 120 segundos
     setGameStartTime(Date.now())
+    setCurrentScreen("syllableGame")
   }
 
   const speakWord = (text: string) => {
@@ -538,78 +588,262 @@ export default function SistemaEducativo() {
     }
   }
 
-  // Datos de la sopa de letras
-  const wordsToFind = ["GATO", "RANA", "ROSA", "DADO", "JOYA"]
-  const grid = [
-    ["G", "A", "T", "O", "X", "R", "A", "N"],
-    ["X", "R", "X", "X", "A", "X", "X", "A"],
-    ["R", "A", "N", "A", "X", "J", "O", "Y"],
-    ["O", "N", "X", "X", "D", "A", "D", "O"],
-    ["S", "A", "X", "R", "O", "S", "A", "X"],
-    ["A", "X", "G", "A", "T", "O", "X", "X"],
-    ["X", "J", "O", "Y", "A", "X", "R", "A"],
-    ["R", "A", "N", "A", "X", "X", "X", "X"],
-  ]
+  // Función para verificar si las celdas seleccionadas forman una línea válida
+  const isValidSelection = (cells: string[]): boolean => {
+    if (cells.length < 2) return true
 
+    const positions = cells.map((cell) => {
+      const [row, col] = cell.split("-").map(Number)
+      return { row, col }
+    })
+
+    // Verificar si es horizontal
+    const isHorizontal = positions.every((pos) => pos.row === positions[0].row)
+    if (isHorizontal) {
+      // Verificar que las columnas sean consecutivas
+      const cols = positions.map((pos) => pos.col).sort((a, b) => a - b)
+      return cols.every((col, index) => index === 0 || col === cols[index - 1] + 1)
+    }
+
+    // Verificar si es vertical
+    const isVertical = positions.every((pos) => pos.col === positions[0].col)
+    if (isVertical) {
+      // Verificar que las filas sean consecutivas
+      const rows = positions.map((pos) => pos.row).sort((a, b) => a - b)
+      return rows.every((row, index) => index === 0 || row === rows[index - 1] + 1)
+    }
+
+    // Verificar si es diagonal
+    const rowDiff = positions[1].row - positions[0].row
+    const colDiff = positions[1].col - positions[0].col
+
+    // Debe ser diagonal (diferencia absoluta de filas = diferencia absoluta de columnas)
+    if (Math.abs(rowDiff) !== Math.abs(colDiff)) return false
+
+    // Verificar que todas las posiciones sigan el mismo patrón diagonal
+    return positions.every((pos, index) => {
+      if (index === 0) return true
+      const expectedRow = positions[0].row + (rowDiff > 0 ? index : -index)
+      const expectedCol = positions[0].col + (colDiff > 0 ? index : -index)
+      return pos.row === expectedRow && pos.col === expectedCol
+    })
+  }
+
+  // Funciones de la sopa de letras
   const handleCellClick = (row: number, col: number) => {
     const cellId = `${row}-${col}`
-    const letter = grid[row][col]
 
     if (selectedCells.includes(cellId)) {
-      setSelectedCells(selectedCells.filter((id) => id !== cellId))
+      // Si la celda ya está seleccionada, limpiar selección
+      setSelectedCells([])
+      setCurrentSelection("")
+    } else if (selectedCells.length === 0) {
+      // Primera celda seleccionada
+      setSelectedCells([cellId])
+      setCurrentSelection(wordSearchGrid[row][col])
     } else {
-      setSelectedCells([...selectedCells, cellId])
-    }
+      // Agregar celda a la selección
+      const newSelection = [...selectedCells, cellId]
 
-    // Lógica simple para encontrar palabras
-    if (letter === "G" && row === 0 && col === 0) {
-      if (!foundWords.includes("GATO")) {
-        setFoundWords([...foundWords, "GATO"])
-        setWordSearchScore(wordSearchScore + 10)
-        alert("¡Encontraste GATO! 🎉")
+      // Verificar si la selección forma una línea válida
+      if (isValidSelection(newSelection)) {
+        setSelectedCells(newSelection)
+        const word = newSelection
+          .map((id) => {
+            const [r, c] = id.split("-").map(Number)
+            return wordSearchGrid[r][c]
+          })
+          .join("")
+        setCurrentSelection(word)
+      } else {
+        // Si no es válida, empezar nueva selección desde esta celda
+        setSelectedCells([cellId])
+        setCurrentSelection(wordSearchGrid[row][col])
       }
     }
+  }
+
+  const checkWord = () => {
+    if (currentSelection.length < 3) return
+
+    setAttempts(attempts + 1)
+
+    // Verificar también la palabra al revés
+    const reversedSelection = currentSelection.split("").reverse().join("")
+
+    if (
+      (wordSearchWords.includes(currentSelection) || wordSearchWords.includes(reversedSelection)) &&
+      !foundWords.includes(currentSelection) &&
+      !foundWords.includes(reversedSelection)
+    ) {
+      // Palabra encontrada
+      const foundWord = wordSearchWords.includes(currentSelection) ? currentSelection : reversedSelection
+      setFoundWords([...foundWords, foundWord])
+      setFoundWordCells([...foundWordCells, ...selectedCells])
+      setWordSearchScore(wordSearchScore + 15 + wordSearchStreak * 5)
+      setWordSearchStreak(wordSearchStreak + 1)
+
+      // Agregar animación a las celdas encontradas
+      selectedCells.forEach((cellId) => {
+        const cell = document.querySelector(`[data-cell-id="${cellId}"]`)
+        if (cell) {
+          cell.classList.add("animate-pulse-success")
+          setTimeout(() => {
+            cell.classList.remove("animate-pulse-success")
+          }, 1000)
+        }
+      })
+
+      setSelectedCells([])
+      setCurrentSelection("")
+      speakWord(`¡Encontraste ${foundWord}!`)
+
+      // Verificar si se completó el juego
+      if (foundWords.length + 1 === wordSearchWords.length) {
+        setTimeout(() => {
+          alert("🎉 ¡Felicitaciones! ¡Encontraste todas las palabras!")
+          saveWordSearchStats()
+        }, 500)
+      }
+    } else {
+      // Palabra incorrecta - agregar animación de error
+      const gridContainer = document.querySelector(".word-search-grid")
+      if (gridContainer) {
+        gridContainer.classList.add("animate-shake")
+        setTimeout(() => {
+          gridContainer.classList.remove("animate-shake")
+        }, 600)
+      }
+
+      setWordSearchLives(wordSearchLives - 1)
+      setWordSearchStreak(0)
+      setSelectedCells([])
+      setCurrentSelection("")
+      speakWord("Inténtalo de nuevo")
+
+      if (wordSearchLives - 1 <= 0) {
+        setTimeout(() => {
+          alert("😔 Se acabaron las vidas. ¡Inténtalo de nuevo!")
+          resetWordSearch()
+        }, 500)
+      }
+    }
+  }
+
+  const saveWordSearchStats = async () => {
+    if (currentUser) {
+      const updatedUser = {
+        ...currentUser,
+        gamesPlayed: currentUser.gamesPlayed + 1,
+        bestScore: Math.max(currentUser.bestScore, wordSearchScore),
+        lastPlayed: new Date().toISOString(),
+      }
+      const updatedUsers = users.map((u) => (u.username === currentUser.username ? updatedUser : u))
+      setUsers(updatedUsers)
+      setCurrentUser(updatedUser)
+
+      await saveUsersToStorage(updatedUsers)
+      await saveCurrentUserToStorage(updatedUser)
+
+      const gameSession: GameSession = {
+        date: new Date().toISOString(),
+        score: wordSearchScore,
+        wordsCompleted: foundWords.length,
+        gameType: "wordSearch",
+      }
+      await saveGameSessionToStorage(gameSession)
+    }
+  }
+
+  const resetWordSearch = () => {
+    setFoundWords([])
+    setWordSearchScore(0)
+    setSelectedCells([])
+    setCurrentSelection("")
+    setWordSearchLives(3)
+    setWordSearchStreak(0)
+    setAttempts(0)
+    setFoundWordCells([])
+  }
+
+  const handleLogin = async () => {
+    const user = users.find((u) => u.username === loginForm.username && u.password === loginForm.password)
+    if (user) {
+      setCurrentUser(user)
+      await saveCurrentUserToStorage(user)
+      setCurrentScreen("menu")
+    } else {
+      alert("Usuario o contraseña incorrectos")
+    }
+  }
+
+  const handleRegister = async () => {
+    if (registerForm.password !== registerForm.confirmPassword) {
+      alert("Las contraseñas no coinciden")
+      return
+    }
+    if (users.find((u) => u.username === registerForm.username)) {
+      alert("Este usuario ya existe")
+      return
+    }
+    const newUser: UserData = {
+      username: registerForm.username,
+      email: registerForm.email,
+      password: registerForm.password,
+      registeredAt: new Date().toISOString(),
+      gamesPlayed: 0,
+      bestScore: 0,
+    }
+    const updatedUsers = [...users, newUser]
+    setUsers(updatedUsers)
+    await saveUsersToStorage(updatedUsers)
+    alert("Usuario registrado con éxito")
+    setCurrentScreen("login")
+  }
+
+  const handleLogout = async () => {
+    setCurrentUser(null)
+    await CapacitorPreferences.remove({ key: "current_user" })
+    setCurrentScreen("login")
   }
 
   // Pantalla de información de almacenamiento
   if (currentScreen === "storage") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 p-6">
+      <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-4xl mx-auto">
-          <Card className="shadow-2xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3 text-3xl">
-                <Database className="w-8 h-8 text-blue-600" />💾 Almacenamiento Local de la Tablet
+          <Card className="shadow-lg border border-gray-200">
+            <CardHeader className="bg-white border-b border-gray-100">
+              <CardTitle className="flex items-center gap-3 text-2xl text-gray-700">
+                <Database className="w-6 h-6 text-gray-600" />💾 Almacenamiento Local
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-8">
-              {/* Información general */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-blue-50 p-6 rounded-xl text-center">
-                  <div className="text-3xl font-bold text-blue-600">{users.length}</div>
-                  <div className="text-blue-700 font-medium">👥 Usuarios Registrados</div>
+            <CardContent className="space-y-6 p-6 bg-white">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg text-center border border-gray-200">
+                  <div className="text-2xl font-bold text-gray-700">{users.length}</div>
+                  <div className="text-gray-600 font-medium">👥 Usuarios</div>
                 </div>
-                <div className="bg-green-50 p-6 rounded-xl text-center">
-                  <div className="text-3xl font-bold text-green-600">{gameSessions.length}</div>
-                  <div className="text-green-700 font-medium">🎮 Sesiones de Juego</div>
+                <div className="bg-gray-50 p-4 rounded-lg text-center border border-gray-200">
+                  <div className="text-2xl font-bold text-gray-700">{gameSessions.length}</div>
+                  <div className="text-gray-600 font-medium">🎮 Sesiones</div>
                 </div>
-                <div className="bg-purple-50 p-6 rounded-xl text-center">
-                  <div className="text-3xl font-bold text-purple-600">{storageInfo?.totalKeys || 0}</div>
-                  <div className="text-purple-700 font-medium">🗄️ Claves de Datos</div>
+                <div className="bg-gray-50 p-4 rounded-lg text-center border border-gray-200">
+                  <div className="text-2xl font-bold text-gray-700">{storageInfo?.totalKeys || 0}</div>
+                  <div className="text-gray-600 font-medium">🗄️ Datos</div>
                 </div>
               </div>
 
-              {/* Usuarios guardados */}
-              <div className="bg-white rounded-xl p-6 border">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">👥 Usuarios en la Tablet</h3>
-                <div className="space-y-3">
+              <div className="bg-white rounded-lg p-4 border border-gray-200">
+                <h3 className="text-lg font-bold mb-3 text-gray-700">👥 Usuarios registrados</h3>
+                <div className="space-y-2">
                   {users.map((user, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
                       <div>
-                        <div className="font-medium">{user.username}</div>
-                        <div className="text-sm text-gray-600">{user.email}</div>
+                        <div className="font-medium text-gray-700">{user.username}</div>
+                        <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
-                      <div className="text-right text-sm">
+                      <div className="text-right text-sm text-gray-600">
                         <div>🏆 {user.bestScore} puntos</div>
                         <div>🎮 {user.gamesPlayed} juegos</div>
                       </div>
@@ -619,61 +853,18 @@ export default function SistemaEducativo() {
                 </div>
               </div>
 
-              {/* Sesiones recientes */}
-              <div className="bg-white rounded-xl p-6 border">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">🎮 Últimas Sesiones de Juego</h3>
-                <div className="space-y-2">
-                  {gameSessions
-                    .slice(-5)
-                    .reverse()
-                    .map((session, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <div className="font-medium">
-                            {session.gameType === "syllables" ? "🎯 Sílabas" : "🔍 Sopa de Letras"}
-                          </div>
-                          <div className="text-sm text-gray-600">{new Date(session.date).toLocaleString()}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-green-600">{session.score} pts</div>
-                          <div className="text-sm text-gray-600">{session.wordsCompleted} palabras</div>
-                        </div>
-                      </div>
-                    ))}
-                  {gameSessions.length === 0 && (
-                    <p className="text-gray-500 text-center py-4">No hay sesiones guardadas</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Información técnica */}
-              {storageInfo && (
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="text-xl font-bold mb-4">🔧 Información Técnica</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <strong>Última actualización:</strong>
-                      <br />
-                      {storageInfo.lastUpdated}
-                    </div>
-                    <div>
-                      <strong>Claves almacenadas:</strong>
-                      <br />
-                      {storageInfo.keys.join(", ")}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Botones de acción */}
-              <div className="flex gap-4 justify-center">
-                <Button onClick={getStorageInfo} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3">
-                  🔄 Actualizar Info
+              <div className="flex gap-3 justify-center">
+                <Button onClick={getStorageInfo} className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2">
+                  🔄 Actualizar
                 </Button>
-                <Button onClick={clearAllStorage} variant="destructive" className="px-6 py-3">
-                  🗑️ Limpiar Todo
+                <Button onClick={clearAllStorage} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2">
+                  🗑️ Limpiar
                 </Button>
-                <Button onClick={() => setCurrentScreen("menu")} variant="outline" className="px-6 py-3">
+                <Button
+                  onClick={() => setCurrentScreen("menu")}
+                  variant="outline"
+                  className="px-4 py-2 border-gray-300"
+                >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Volver
                 </Button>
@@ -688,20 +879,20 @@ export default function SistemaEducativo() {
   // Pantalla de Login
   if (currentScreen === "login") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl">
-          <CardHeader className="text-center space-y-2">
-            <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4">
-              <User className="w-8 h-8 text-purple-600" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg border border-gray-200">
+          <CardHeader className="text-center space-y-3 bg-white border-b border-gray-100">
+            <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+              <User className="w-6 h-6 text-gray-600" />
             </div>
-            <CardTitle className="text-3xl font-bold text-purple-700">🔑 Iniciar Sesión</CardTitle>
-            <p className="text-gray-600">Sistema Educativo - Almacenamiento Local</p>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-xs text-green-800 font-medium">💾 Datos guardados en la tablet</p>
-              <p className="text-xs text-green-700">{users.length} usuarios registrados</p>
+            <CardTitle className="text-2xl font-bold text-gray-700">🔑 Iniciar Sesión</CardTitle>
+            <p className="text-gray-600">Sistema Educativo</p>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p className="text-xs text-gray-700 font-medium">💾 Datos guardados localmente</p>
+              <p className="text-xs text-gray-600">{users.length} usuarios registrados</p>
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4 p-6 bg-white">
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <User className="w-4 h-4" />
@@ -709,13 +900,12 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="text"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="Tu nombre de usuario"
                 value={loginForm.username}
                 onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <Lock className="w-4 h-4" />
@@ -723,40 +913,36 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="password"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="Tu contraseña"
                 value={loginForm.password}
                 onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               />
             </div>
-
             <Button
               onClick={handleLogin}
-              className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-4 text-xl transition-all transform hover:scale-105"
+              className="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 text-lg transition-all"
             >
               🚀 Entrar
             </Button>
-
             <Button
               variant="ghost"
               onClick={() => setCurrentScreen("register")}
-              className="w-full text-purple-600 hover:text-purple-800 hover:bg-purple-50 py-3 text-lg"
+              className="w-full text-gray-600 hover:text-gray-800 hover:bg-gray-50 py-2 text-base"
             >
               ¿No tienes cuenta? Regístrate aquí
             </Button>
 
-            {/* Demo credentials para tablet */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
               <p className="text-sm text-yellow-800 font-medium">💡 Credenciales de prueba:</p>
-              <p className="text-sm text-yellow-700 mb-3">
+              <p className="text-sm text-yellow-700 mb-2">
                 Usuario: <strong>tablet</strong> | Contraseña: <strong>1234</strong>
               </p>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-sm"
+                className="text-sm border-yellow-300 text-yellow-700 hover:bg-yellow-100 bg-transparent"
                 onClick={async () => {
-                  // Crear usuario tablet si no existe
                   if (!users.find((u) => u.username === "tablet")) {
                     const tabletUser: UserData = {
                       username: "tablet",
@@ -779,14 +965,13 @@ export default function SistemaEducativo() {
               </Button>
             </div>
 
-            {/* Botón para ver almacenamiento */}
             <Button
               variant="outline"
               onClick={() => setCurrentScreen("storage")}
-              className="w-full flex items-center justify-center gap-2 text-sm"
+              className="w-full flex items-center justify-center gap-2 text-sm border-gray-300"
             >
               <Database className="w-4 h-4" />
-              Ver Almacenamiento Local
+              Ver Almacenamiento
             </Button>
           </CardContent>
         </Card>
@@ -797,16 +982,16 @@ export default function SistemaEducativo() {
   // Pantalla de Registro
   if (currentScreen === "register") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl">
-          <CardHeader className="text-center space-y-2">
-            <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4">
-              <User className="w-8 h-8 text-purple-600" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg border border-gray-200">
+          <CardHeader className="text-center space-y-3 bg-white border-b border-gray-100">
+            <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+              <User className="w-6 h-6 text-gray-600" />
             </div>
-            <CardTitle className="text-3xl font-bold text-purple-700">📚 Crear Cuenta</CardTitle>
-            <p className="text-gray-600">Se guardará en el almacenamiento de la tablet</p>
+            <CardTitle className="text-2xl font-bold text-gray-700">📚 Crear Cuenta</CardTitle>
+            <p className="text-gray-600">Se guardará localmente</p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-6 bg-white">
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <User className="w-4 h-4" />
@@ -814,13 +999,12 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="text"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="Ingresa tu nombre de usuario"
                 value={registerForm.username}
                 onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <Mail className="w-4 h-4" />
@@ -828,13 +1012,12 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="email"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="tu@email.com"
                 value={registerForm.email}
                 onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <Lock className="w-4 h-4" />
@@ -842,13 +1025,12 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="password"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="Mínimo 4 caracteres"
                 value={registerForm.password}
                 onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2 text-gray-700">
                 <Lock className="w-4 h-4" />
@@ -856,24 +1038,22 @@ export default function SistemaEducativo() {
               </label>
               <input
                 type="password"
-                className="w-full p-4 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full p-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all"
                 placeholder="Repite tu contraseña"
                 value={registerForm.confirmPassword}
                 onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
               />
             </div>
-
             <Button
               onClick={handleRegister}
-              className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-4 text-xl transition-all transform hover:scale-105"
+              className="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 text-lg transition-all"
             >
               ✨ Crear Cuenta
             </Button>
-
             <Button
               variant="ghost"
               onClick={() => setCurrentScreen("login")}
-              className="w-full text-purple-600 hover:text-purple-800 hover:bg-purple-50 py-3 text-lg"
+              className="w-full text-gray-600 hover:text-gray-800 hover:bg-gray-50 py-2 text-base"
             >
               ¿Ya tienes cuenta? Inicia Sesión
             </Button>
@@ -883,45 +1063,44 @@ export default function SistemaEducativo() {
     )
   }
 
-  // Menú Principal - Con información de almacenamiento
+  // Menú Principal
   if (currentScreen === "menu") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Header para tablet */}
-          <Card className="mb-8 shadow-xl">
-            <CardContent className="p-8">
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <Card className="mb-6 shadow-lg border border-gray-200">
+            <CardContent className="p-6 bg-white">
               <div className="flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                    <User className="w-8 h-8 text-white" />
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                    <User className="w-6 h-6 text-gray-600" />
                   </div>
                   <div>
-                    <h1 className="text-4xl font-bold text-purple-700">¡Hola {currentUser?.username}! 👋</h1>
-                    <p className="text-xl text-gray-600">Datos guardados en tu tablet 💾</p>
+                    <h1 className="text-3xl font-bold text-gray-700">¡Hola {currentUser?.username}! 👋</h1>
+                    <p className="text-lg text-gray-600">Datos guardados localmente 💾</p>
                     <p className="text-sm text-gray-500">
                       Última vez:{" "}
                       {currentUser?.lastPlayed ? new Date(currentUser.lastPlayed).toLocaleString() : "Primera vez"}
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="lg"
                     onClick={() => setCurrentScreen("storage")}
-                    className="flex items-center gap-2 hover:bg-blue-50 hover:text-blue-600 px-6 py-3 text-lg"
+                    className="flex items-center gap-2 border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-2"
                   >
-                    <Database className="w-5 h-5" />
+                    <Database className="w-4 h-4" />
                     Ver Datos
                   </Button>
                   <Button
                     variant="outline"
                     size="lg"
                     onClick={handleLogout}
-                    className="flex items-center gap-2 hover:bg-red-50 hover:text-red-600 px-6 py-3 text-lg"
+                    className="flex items-center gap-2 border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-2 bg-transparent"
                   >
-                    <LogOut className="w-5 h-5" />
+                    <LogOut className="w-4 h-4" />
                     Cerrar Sesión
                   </Button>
                 </div>
@@ -929,121 +1108,97 @@ export default function SistemaEducativo() {
             </CardContent>
           </Card>
 
-          {/* Título principal */}
-          <div className="text-center mb-12">
-            <h2 className="text-6xl font-bold text-white mb-4 drop-shadow-lg">🎮 Centro de Actividades</h2>
-            <p className="text-2xl text-white/90">Todo guardado localmente en tu tablet</p>
+          <div className="text-center mb-8">
+            <h2 className="text-4xl font-bold text-gray-700 mb-3">🎮 Centro de Actividades</h2>
+            <p className="text-xl text-gray-600">Aprende jugando</p>
           </div>
 
-          {/* Actividades - Layout para tablet */}
-          <div className="grid lg:grid-cols-2 gap-10 mb-12">
-            {/* Juego de Sílabas */}
+          <div className="grid lg:grid-cols-2 gap-6 mb-8">
             <Card
-              className="hover:shadow-2xl transition-all duration-300 cursor-pointer border-l-8 border-l-green-500 transform hover:scale-105 hover:-translate-y-2"
+              className="hover:shadow-lg transition-all duration-300 cursor-pointer border-l-4 border-l-gray-400 border border-gray-200"
               onClick={() => {
-                setCurrentScreen("syllableGame")
-                setGameStarted(false)
-                setCurrentWordIndex(0)
+                setCurrentScreen("syllableSelection")
                 setScore(0)
                 setLives(3)
                 setSelectedSyllable("")
                 setGameStatus("playing")
                 setStreak(0)
-                setTimeLeft(30)
+                setTimeLeft(60)
+                setGameStarted(false)
               }}
             >
-              <CardContent className="p-10 text-center">
-                <div className="text-9xl mb-8 animate-bounce">🎯</div>
-                <h3 className="text-4xl font-bold text-gray-800 mb-6">Juego de Sílabas</h3>
-                <p className="text-gray-600 mb-6 text-xl">Completa las palabras con las sílabas correctas</p>
-                <p className="text-lg text-gray-500 mb-8">K, R, D, J, G + combinadas • 25 palabras</p>
-                <div className="flex justify-center gap-4 mb-6">
-                  <Badge className="bg-green-100 text-green-800 text-lg px-4 py-2">✅ Disponible</Badge>
-                  <Badge className="bg-blue-100 text-blue-800 text-lg px-4 py-2">💾 Local</Badge>
+              <CardContent className="p-8 text-center bg-white">
+                <div className="text-6xl mb-6">🎯</div>
+                <h3 className="text-3xl font-bold text-gray-700 mb-4">Juego de Sílabas</h3>
+                <p className="text-gray-600 mb-4 text-lg">Completa las palabras con las sílabas correctas</p>
+                <p className="text-base text-gray-500 mb-6">K, R, D, J, G + combinadas • {allWords.length} palabras</p>
+                <div className="flex justify-center gap-3 mb-4">
+                  <Badge className="bg-gray-100 text-gray-700 text-base px-3 py-1">✅ Disponible</Badge>
+                  <Badge className="bg-gray-100 text-gray-700 text-base px-3 py-1">💾 Local</Badge>
                 </div>
-                <div className="bg-green-50 rounded-lg p-6">
-                  <p className="text-lg text-green-700 font-medium">🏆 Progreso guardado automáticamente</p>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <p className="text-base text-gray-700 font-medium">🏆 Progreso guardado automáticamente</p>
+                  <p className="text-sm text-gray-600 mt-1">⏰ 120 segundos por palabra</p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Sopa de Letras */}
             <Card
-              className="hover:shadow-2xl transition-all duration-300 cursor-pointer border-l-8 border-l-yellow-500 transform hover:scale-105 hover:-translate-y-2"
+              className="hover:shadow-lg transition-all duration-300 cursor-pointer border-l-4 border-l-gray-400 border border-gray-200"
               onClick={() => {
                 setCurrentScreen("wordSearch")
                 setWordSearchStarted(false)
-                setFoundWords([])
-                setWordSearchScore(0)
-                setSelectedCells([])
+                resetWordSearch()
               }}
             >
-              <CardContent className="p-10 text-center">
-                <div className="text-9xl mb-8 animate-pulse">🔍</div>
-                <h3 className="text-4xl font-bold text-gray-800 mb-6">Sopa de Letras</h3>
-                <p className="text-gray-600 mb-6 text-xl">Encuentra palabras ocultas en la cuadrícula</p>
-                <p className="text-lg text-gray-500 mb-8">5 palabras • Cuadrícula 8x8</p>
-                <div className="flex justify-center gap-4 mb-6">
-                  <Badge className="bg-yellow-100 text-yellow-800 text-lg px-4 py-2">✅ Disponible</Badge>
-                  <Badge className="bg-orange-100 text-orange-800 text-lg px-4 py-2">💾 Local</Badge>
+              <CardContent className="p-8 text-center bg-white">
+                <div className="text-6xl mb-6">🔍</div>
+                <h3 className="text-3xl font-bold text-gray-700 mb-4">Sopa de Letras</h3>
+                <p className="text-gray-600 mb-4 text-lg">Encuentra palabras ocultas en la cuadrícula</p>
+                <p className="text-base text-gray-500 mb-6">
+                  {wordSearchWords.length} palabras trabadas • Cuadrícula 20x20
+                </p>
+                <div className="flex justify-center gap-3 mb-4">
+                  <Badge className="bg-gray-100 text-gray-700 text-base px-3 py-1">✅ Disponible</Badge>
+                  <Badge className="bg-gray-100 text-gray-700 text-base px-3 py-1">💾 Local</Badge>
                 </div>
-                <div className="bg-yellow-50 rounded-lg p-6">
-                  <p className="text-lg text-yellow-700 font-medium">🧠 Estadísticas guardadas en tablet</p>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <p className="text-base text-gray-700 font-medium">🧠 Horizontal, Vertical y Diagonal</p>
+                  <p className="text-sm text-gray-600 mt-1">❤️ 3 vidas • 🔥 +15 puntos por palabra</p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Estadísticas - Con información de almacenamiento */}
-          <Card className="shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-4 text-3xl">
-                <Trophy className="w-8 h-8 text-yellow-500" />📊 Panel de Estadísticas Locales
+          <Card className="shadow-lg border border-gray-200">
+            <CardHeader className="bg-white border-b border-gray-100">
+              <CardTitle className="flex items-center gap-3 text-2xl text-gray-700">
+                <Trophy className="w-6 h-6 text-gray-600" />📊 Estadísticas
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                <div className="text-center p-8 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl">
-                  <div className="text-5xl font-bold text-purple-600 mb-4">{currentUser?.gamesPlayed || 0}</div>
-                  <div className="text-lg text-purple-700 font-medium">🏆 Juegos Completados</div>
-                  <div className="text-sm text-purple-600 mt-2">Guardado en tablet</div>
+            <CardContent className="p-6 bg-white">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="text-center p-6 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-4xl font-bold text-gray-700 mb-3">{currentUser?.gamesPlayed || 0}</div>
+                  <div className="text-base text-gray-600 font-medium">🏆 Juegos Completados</div>
+                  <div className="text-sm text-gray-500 mt-1">Guardado localmente</div>
                 </div>
-                <div className="text-center p-8 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
-                  <div className="text-5xl font-bold text-green-600 mb-4">{currentUser?.bestScore || 0}</div>
-                  <div className="text-lg text-green-700 font-medium">⭐ Mejor Puntuación</div>
-                  <div className="text-sm text-green-600 mt-2">Récord personal</div>
+                <div className="text-center p-6 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-4xl font-bold text-gray-700 mb-3">{currentUser?.bestScore || 0}</div>
+                  <div className="text-base text-gray-600 font-medium">⭐ Mejor Puntuación</div>
+                  <div className="text-sm text-gray-500 mt-1">Récord personal</div>
                 </div>
-                <div className="text-center p-8 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
-                  <div className="text-5xl font-bold text-blue-600 mb-4">
+                <div className="text-center p-6 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-4xl font-bold text-gray-700 mb-3">
                     {Math.floor((currentUser?.totalTimeSpent || 0) / 60)}
                   </div>
-                  <div className="text-lg text-blue-700 font-medium">⏱️ Minutos Jugados</div>
-                  <div className="text-sm text-blue-600 mt-2">Tiempo total</div>
+                  <div className="text-base text-gray-600 font-medium">⏱️ Minutos Jugados</div>
+                  <div className="text-sm text-gray-500 mt-1">Tiempo total</div>
                 </div>
-                <div className="text-center p-8 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl">
-                  <div className="text-5xl font-bold text-orange-600 mb-4">{gameSessions.length}</div>
-                  <div className="text-lg text-orange-700 font-medium">📱 Sesiones</div>
-                  <div className="text-sm text-orange-600 mt-2">Historial completo</div>
-                </div>
-              </div>
-
-              {/* Progreso */}
-              <div className="mt-10 p-8 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-6 flex items-center gap-3 text-xl">
-                  <Star className="w-6 h-6 text-yellow-500" />
-                  Tu Progreso de Aprendizaje (Almacenado Localmente)
-                </h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg text-gray-600">Nivel de Sílabas</span>
-                    <Badge variant="secondary" className="text-lg px-4 py-2">
-                      {currentUser?.gamesPlayed && currentUser.gamesPlayed > 0 ? "Principiante" : "Nuevo"}
-                    </Badge>
-                  </div>
-                  <Progress value={Math.min((currentUser?.gamesPlayed || 0) * 10, 100)} className="h-4" />
-                  <p className="text-sm text-gray-500">
-                    Todos tus datos están seguros en el almacenamiento interno de la tablet 🔒
-                  </p>
+                <div className="text-center p-6 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-4xl font-bold text-gray-700 mb-3">{gameSessions.length}</div>
+                  <div className="text-base text-gray-600 font-medium">📱 Sesiones</div>
+                  <div className="text-sm text-gray-500 mt-1">Historial completo</div>
                 </div>
               </div>
             </CardContent>
@@ -1053,271 +1208,293 @@ export default function SistemaEducativo() {
     )
   }
 
-  // El resto de las pantallas permanecen igual...
-  // (Juego de Sílabas y Sopa de Letras sin cambios)
-
-  // Juego de Sílabas - Optimizado para tablet
-  if (currentScreen === "syllableGame") {
-    if (!gameStarted) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center p-6">
-          <Card className="w-full max-w-2xl text-center shadow-2xl">
-            <CardHeader className="space-y-6">
-              <div className="text-9xl animate-bounce">🎯</div>
-              <CardTitle className="text-5xl font-bold text-purple-700">Completa las Sílabas</CardTitle>
-              <p className="text-2xl text-gray-600">Sílabas con K, R, D, J, G</p>
+  // Pantalla de Selección de Categoría para Juego de Sílabas
+  if (currentScreen === "syllableSelection") {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="shadow-lg border border-gray-200">
+            <CardHeader className="bg-white border-b border-gray-100 text-center">
+              <div className="text-6xl mb-4">🎯</div>
+              <CardTitle className="text-3xl font-bold text-gray-700 mb-2">Selecciona tu Categoría</CardTitle>
+              <p className="text-lg text-gray-600">¿Con qué sílabas quieres practicar?</p>
             </CardHeader>
-            <CardContent className="space-y-10">
-              <div className="bg-blue-50 rounded-xl p-8">
-                <p className="text-2xl text-gray-700 font-medium mb-4">¡Hola {currentUser?.username}! 👋</p>
-                <p className="text-xl text-gray-600">¡Ayuda a completar las palabras!</p>
-                <p className="text-lg text-gray-500 mt-4">Tu progreso se guarda automáticamente 💾</p>
+            <CardContent className="space-y-6 p-6 bg-white">
+              <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
+                <p className="text-xl text-blue-800 font-medium">¡Hola {currentUser?.username}! 👋</p>
+                <p className="text-base text-blue-600">Elige una categoría para comenzar</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 text-lg">
-                <div className="bg-green-50 p-6 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Categorías individuales */}
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "K" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("K")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🥝</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con K</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "K").length} palabras
+                    </p>
+                    {selectedCategory === "K" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "R" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("R")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🐸</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con R</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "R").length} palabras
+                    </p>
+                    {selectedCategory === "R" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "D" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("D")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🎲</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con D</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "D").length} palabras
+                    </p>
+                    {selectedCategory === "D" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "J" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("J")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">💎</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con J</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "J").length} palabras
+                    </p>
+                    {selectedCategory === "J" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "G" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("G")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🐱</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con G</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "G").length} palabras
+                    </p>
+                    {selectedCategory === "G" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "GR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("GR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">📏</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con GR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "GR").length} palabras
+                    </p>
+                    {selectedCategory === "GR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "DR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("DR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🐉</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con DR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "DR").length} palabras
+                    </p>
+                    {selectedCategory === "DR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "FR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("FR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🍓</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con FR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "FR").length} palabras
+                    </p>
+                    {selectedCategory === "FR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "CR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("CR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">✝️</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con CR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "CR").length} palabras
+                    </p>
+                    {selectedCategory === "CR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "TR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("TR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">🚂</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con TR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "TR").length} palabras
+                    </p>
+                    {selectedCategory === "TR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "BR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("BR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">💪</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con BR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "BR").length} palabras
+                    </p>
+                    {selectedCategory === "BR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
+                    selectedCategory === "PR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                  }`}
+                  onClick={() => setSelectedCategory("PR")}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-4xl mb-2">👦</div>
+                    <h3 className="font-bold text-gray-700">Sílabas con PR</h3>
+                    <p className="text-sm text-blue-600">
+                      {allWords.filter((w) => w.category === "PR").length} palabras
+                    </p>
+                    {selectedCategory === "PR" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Opción "Todas las Sílabas" destacada */}
+              <Card
+                className={`hover:shadow-lg transition-all cursor-pointer border-4 ${
+                  selectedCategory === "ALL" ? "border-yellow-500 bg-yellow-100" : "border-yellow-300 bg-yellow-50"
+                }`}
+                onClick={() => setSelectedCategory("ALL")}
+              >
+                <CardContent className="p-6 text-center">
+                  <div className="text-6xl mb-3">☀️</div>
+                  <h3 className="text-2xl font-bold text-gray-700 mb-2">Todas las Sílabas</h3>
+                  <p className="text-lg text-blue-600 font-medium">{allWords.length} palabras</p>
+                  {selectedCategory === "ALL" && <Badge className="mt-2 bg-blue-500 text-white">Seleccionado</Badge>}
+                </CardContent>
+              </Card>
+
+              {/* Preview de palabras para la categoría seleccionada */}
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <p className="text-center text-lg font-medium text-gray-700 mb-3">
+                  🎯 Palabras en "
+                  {selectedCategory === "ALL" ? "Todas las Categorías" : `Sílabas con ${selectedCategory}`}":
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {filteredWords.slice(0, 8).map((word, index) => (
+                    <Badge key={index} variant="outline" className="text-sm">
+                      {word.image} {word.complete}
+                    </Badge>
+                  ))}
+                  {filteredWords.length > 8 && (
+                    <Badge variant="outline" className="text-sm">
+                      +{filteredWords.length - 8} más...
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Información de bonificaciones */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                   <p className="text-green-700 font-medium">🎯 +10 puntos por acierto</p>
                 </div>
-                <div className="bg-yellow-50 p-6 rounded-lg">
-                  <p className="text-yellow-700 font-medium">⭐ Bonus por racha</p>
+                <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <p className="text-orange-700 font-medium">⭐ Bonus por racha</p>
                 </div>
-                <div className="bg-red-50 p-6 rounded-lg">
+                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
                   <p className="text-red-700 font-medium">❤️ Tienes 3 vidas</p>
                 </div>
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <p className="text-blue-700 font-medium">⏰ 30 segundos/palabra</p>
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <p className="text-blue-700 font-medium">⏰ 60 segundos total</p>
                 </div>
               </div>
 
-              <div className="bg-purple-50 rounded-xl p-6">
-                <p className="text-purple-700 font-medium text-xl">🔤 Sílabas incluidas:</p>
-                <p className="text-lg text-purple-600 mt-2">K, R, D, J, G + combinadas (GR, DR)</p>
-              </div>
-
-              <Button
-                onClick={startSyllableGame}
-                className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-6 text-2xl transition-all transform hover:scale-105"
-              >
-                ¡Comenzar Aventura! 🚀
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={() => setCurrentScreen("menu")}
-                className="w-full flex items-center justify-center gap-3 py-4 text-xl"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                Volver al Menú
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )
-    }
-
-    if (gameStatus === "gameOver" || gameStatus === "completed") {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center p-6">
-          <Card className="w-full max-w-2xl text-center shadow-2xl">
-            <CardHeader className="space-y-6">
-              <CardTitle className="text-5xl font-bold">
-                {gameStatus === "completed" ? (
-                  <span className="text-yellow-600">🏆 ¡Increíble!</span>
-                ) : (
-                  <span className="text-red-600">🎮 Fin del Juego</span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-10">
-              <div className="text-9xl animate-bounce">{gameStatus === "completed" ? "🎉" : "😔"}</div>
-
-              <div className="bg-gray-50 rounded-xl p-8 space-y-6">
-                <p className="text-4xl font-bold text-purple-700">Puntuación Final: {score}</p>
-                <p className="text-2xl text-gray-600">
-                  Palabras completadas: {gameStatus === "completed" ? words.length : currentWordIndex} de {words.length}
-                </p>
-                <div className="text-lg text-gray-500 space-y-2">
-                  <p>Racha máxima: {streak}</p>
-                  <p>
-                    Precisión:{" "}
-                    {currentWordIndex > 0 ? Math.round(((currentWordIndex - (3 - lives)) / currentWordIndex) * 100) : 0}
-                    %
+              <div className="text-center space-y-4">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <p className="text-blue-700 font-medium">
+                    Categoría seleccionada:{" "}
+                    <span className="font-bold">
+                      {selectedCategory === "ALL" ? "Todas las Sílabas" : `Sílabas con ${selectedCategory}`}
+                    </span>
                   </p>
-                  <p className="text-green-600 font-medium">💾 Estadísticas guardadas en tablet</p>
+                  <p className="text-blue-600 text-sm">{filteredWords.length} palabras disponibles</p>
                 </div>
 
-                {gameStatus === "completed" && (
-                  <div className="flex justify-center space-x-2 mt-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-10 h-10 fill-yellow-400 text-yellow-400 animate-pulse" />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-6">
                 <Button
-                  onClick={restartSyllableGame}
-                  className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-6 text-2xl transition-all transform hover:scale-105"
+                  onClick={() => startSyllableGame()}
+                  className="bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-8 text-xl transition-all"
                 >
-                  <RefreshCw className="w-6 h-6 mr-3" />
-                  Jugar de Nuevo
+                  🚀 ¡Comenzar Aventura!
                 </Button>
+
                 <Button
                   variant="outline"
                   onClick={() => setCurrentScreen("menu")}
-                  className="w-full flex items-center justify-center gap-3 py-4 text-xl"
+                  className="ml-4 px-6 py-3 text-lg border-gray-300"
                 >
-                  <ArrowLeft className="w-5 h-5" />
-                  Volver al Menú
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )
-    }
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 p-6">
-        <div className="max-w-6xl mx-auto">
-          {/* Header con estadísticas - Tablet */}
-          <Card className="mb-8 shadow-xl">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center space-x-6">
-                  <Badge variant="secondary" className="text-2xl px-6 py-3 bg-purple-100">
-                    <Trophy className="w-6 h-6 mr-3" />
-                    {score}
-                  </Badge>
-                  <Badge variant="destructive" className="text-2xl px-6 py-3">
-                    ❤️ {lives}
-                  </Badge>
-                  <Badge variant="outline" className="text-2xl px-6 py-3 bg-orange-100">
-                    🔥 {streak}
-                  </Badge>
-                </div>
-                <div className="text-4xl font-bold text-red-600 animate-pulse">⏰ {timeLeft}s</div>
-              </div>
-              <Progress value={progress} className="h-6 mb-4" />
-              <p className="text-center text-lg text-gray-600 font-medium">
-                Palabra {currentWordIndex + 1} de {words.length} • {Math.round(progress)}% completado
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Área principal del juego - Tablet */}
-          <Card className="shadow-2xl">
-            <CardHeader className="text-center pb-6">
-              <CardTitle
-                className={`text-4xl font-bold transition-all duration-300 ${
-                  gameStatus === "correct"
-                    ? "text-green-600 animate-bounce"
-                    : gameStatus === "wrong"
-                      ? "text-red-600 animate-shake"
-                      : gameStatus === "gameOver"
-                        ? "text-red-700"
-                        : gameStatus === "completed"
-                          ? "text-yellow-600"
-                          : "text-blue-600"
-                }`}
-              >
-                {gameStatus === "correct"
-                  ? "¡Excelente! 🎉"
-                  : gameStatus === "wrong"
-                    ? "¡Inténtalo de nuevo! 😊"
-                    : gameStatus === "gameOver"
-                      ? "¡Juego terminado! 🎮"
-                      : gameStatus === "completed"
-                        ? "¡Felicitaciones! ¡Completaste todo! 🏆"
-                        : "Completa la palabra"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-10">
-              {/* Imagen y palabra - Tablet */}
-              <div className="text-center space-y-8">
-                <div className="text-10xl animate-pulse">{currentWord.image}</div>
-                <div className="bg-gray-50 rounded-xl p-8">
-                  <div className="text-6xl font-bold text-gray-800 tracking-wider mb-6">
-                    {selectedSyllable && gameStatus === "correct"
-                      ? currentWord.complete
-                      : currentWord.incomplete.replace("_", selectedSyllable || "_")}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors text-xl"
-                    onClick={() => speakWord(currentWord.complete)}
-                  >
-                    <Volume2 className="w-6 h-6 mr-3" />
-                    Escuchar palabra completa
-                  </Button>
-                </div>
-              </div>
-
-              {/* Opciones de sílabas - Tablet */}
-              {gameStatus === "playing" && (
-                <div className="grid grid-cols-2 gap-8">
-                  {options.map((syllable, index) => (
-                    <Button
-                      key={index}
-                      onClick={() => handleSyllableSelect(syllable)}
-                      className={`h-24 text-4xl font-bold transition-all duration-300 transform hover:scale-105 ${
-                        selectedSyllable === syllable
-                          ? gameStatus === "correct"
-                            ? "bg-green-500 hover:bg-green-600 text-white animate-pulse-success"
-                            : gameStatus === "wrong"
-                              ? "bg-red-500 hover:bg-red-600 text-white animate-shake"
-                              : "bg-blue-500 hover:bg-blue-600 text-white"
-                          : "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg"
-                      }`}
-                      disabled={gameStatus !== "playing"}
-                    >
-                      {syllable}
-                    </Button>
-                  ))}
-                </div>
-              )}
-
-              {/* Botón para escuchar sílaba - Tablet */}
-              {gameStatus === "playing" && (
-                <div className="text-center">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="text-purple-600 hover:text-purple-800 hover:bg-purple-50 border-purple-200 text-xl px-8 py-4"
-                    onClick={() => speakWord(currentWord.syllable)}
-                  >
-                    <Volume2 className="w-5 h-5 mr-3" />
-                  </Button>
-                </div>
-              )}
-
-              {/* Mensaje de estado - Tablet */}
-              {gameStatus !== "playing" && (
-                <div className="text-center bg-gray-50 rounded-xl p-8">
-                  <div className="text-8xl mb-6 animate-bounce">{gameStatus === "correct" ? "🎉" : "😊"}</div>
-                  {gameStatus === "correct" && (
-                    <div className="text-2xl text-green-600 font-semibold">
-                      ¡Perfecto! La respuesta era "{currentWord.syllable}" ✨
-                    </div>
-                  )}
-                  {gameStatus === "wrong" && (
-                    <div className="text-2xl text-red-600 font-semibold">
-                      La respuesta correcta era "{currentWord.syllable}" 💪
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Botón volver - Tablet */}
-              <div className="text-center pt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentScreen("menu")}
-                  className="flex items-center gap-3 hover:bg-gray-50 px-8 py-4 text-xl"
-                >
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="w-4 h-4 mr-2" />
                   Volver al Menú
                 </Button>
               </div>
@@ -1328,58 +1505,295 @@ export default function SistemaEducativo() {
     )
   }
 
-  // Sopa de Letras - Optimizado para tablet
+  // Para la pantalla del juego de sílabas (syllableGame), cambiar por:
+  if (currentScreen === "syllableGame") {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Header con estadísticas */}
+          <Card className="mb-6 shadow-lg border border-gray-200">
+            <CardContent className="p-4 bg-white">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <Badge className="bg-blue-100 text-blue-700 text-lg px-3 py-1">🏆 {score}</Badge>
+                  <Badge className="bg-red-100 text-red-700 text-lg px-3 py-1">❤️ {lives}</Badge>
+                  <Badge className="bg-orange-100 text-orange-700 text-lg px-3 py-1">🔥 {streak}</Badge>
+                  <Badge className="bg-gray-100 text-gray-700 text-lg px-3 py-1">
+                    {selectedCategory === "ALL" ? "Todas" : selectedCategory}
+                  </Badge>
+                </div>
+                <div className="text-center">
+                  <div
+                    className={`text-3xl font-bold ${timeLeft <= 10 ? "text-red-600 animate-pulse" : "text-gray-700"}`}
+                  >
+                    {timeLeft}s
+                  </div>
+                  <p className="text-sm text-gray-600">Tiempo total</p>
+                </div>
+              </div>
+              <div className="mt-2 text-center">
+                <p className="text-sm text-blue-600">
+                  Palabra {currentWordIndex + 1} de {filteredWords.length} • {Math.round(progress)}% completado
+                </p>
+                <p className="text-xs text-gray-500">
+                  Inicio: {new Date(gameStartTime).toLocaleTimeString()} • Tiempo transcurrido: {60 - timeLeft}s
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Contenido principal del juego */}
+          <Card className="shadow-lg border border-gray-200">
+            <CardHeader className="bg-white border-b border-gray-100 text-center">
+              <CardTitle className="text-2xl font-bold text-gray-700">Completa la palabra</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-8 p-8 bg-white text-center">
+              {/* Imagen grande del objeto */}
+              <div className="flex justify-center">
+                <div className="w-48 h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center shadow-lg border-4 border-gray-300">
+                  <div className="text-8xl">{currentWord?.image || "❓"}</div>
+                </div>
+              </div>
+
+              {/* Palabra incompleta */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <div className="text-6xl font-bold text-gray-700 mb-4 tracking-wider">
+                  {selectedSyllable ? currentWord?.incomplete.replace("_", selectedSyllable) : currentWord?.incomplete}
+                </div>
+                <Button
+                  variant="ghost"
+                  className="text-blue-600 hover:text-blue-800 flex items-center gap-2 mx-auto"
+                  onClick={() => speakWord(currentWord?.complete || "")}
+                >
+                  🔊 Escuchar palabra completa
+                </Button>
+              </div>
+
+              {/* Opciones de sílabas */}
+              <div className="grid grid-cols-2 gap-6">
+                {options.map((option, index) => (
+                  <Button
+                    key={index}
+                    onClick={() => handleSyllableSelect(option)}
+                    className={`h-20 text-3xl font-bold transition-all duration-300 ${
+                      selectedSyllable === option
+                        ? gameStatus === "correct"
+                          ? "bg-green-500 text-white animate-pulse-success"
+                          : gameStatus === "wrong"
+                            ? "bg-red-500 text-white animate-shake"
+                            : "bg-blue-500 text-white"
+                        : "bg-gray-600 hover:bg-gray-700 text-white"
+                    }`}
+                    disabled={gameStatus !== "playing"}
+                  >
+                    {option}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Botones de control */}
+              <div className="flex justify-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentScreen("syllableSelection")}
+                  className="flex items-center gap-2 border-gray-300"
+                >
+                  🔄 Cambiar Categoría
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentScreen("menu")}
+                  className="flex items-center gap-2 border-gray-300"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Volver al Menú
+                </Button>
+              </div>
+
+              {/* Mensajes de estado */}
+              {gameStatus === "correct" && (
+                <div className="bg-green-50 rounded-lg p-6 border border-green-200 animate-bounce-in">
+                  <div className="text-6xl mb-3">🎉</div>
+                  <p className="text-2xl font-bold text-green-700">¡Correcto!</p>
+                  <p className="text-xl text-green-600 mb-2">{currentWord?.complete}</p>
+                  <p className="text-lg text-green-600">+{10 + streak * 2} puntos</p>
+                  {streak > 0 && <p className="text-base text-green-500">🔥 Racha: {streak + 1}</p>}
+                </div>
+              )}
+
+              {gameStatus === "wrong" && (
+                <div className="bg-red-50 rounded-lg p-6 border border-red-200 animate-shake">
+                  <div className="text-6xl mb-3">😔</div>
+                  <p className="text-2xl font-bold text-red-700">¡Incorrecto!</p>
+                  <p className="text-xl text-red-600 mb-2">La palabra correcta es: {currentWord?.complete}</p>
+                  <p className="text-lg text-red-600">Te quedan {lives - 1} vidas</p>
+                  {lives - 1 > 0 && <p className="text-base text-red-500">¡Inténtalo de nuevo!</p>}
+                </div>
+              )}
+
+              {gameStatus === "gameOver" && (
+                <div className="bg-gray-50 rounded-lg p-8 border border-gray-200">
+                  <div className="text-8xl mb-4">😞</div>
+                  <h3 className="text-3xl font-bold text-gray-700 mb-4">¡Juego Terminado!</h3>
+                  <div className="bg-blue-50 rounded-lg p-4 mb-6 border border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                      <div>
+                        <p className="text-lg font-bold text-blue-700">📊 RESULTADO FINAL</p>
+                        <p className="text-xl text-blue-600">
+                          Puntaje: <span className="font-bold text-blue-800">{score}</span>
+                        </p>
+                        <p className="text-lg text-blue-600">
+                          Palabras: <span className="font-bold">{currentWordIndex}</span> de {filteredWords.length}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-blue-700">⏰ TIEMPO DE JUEGO</p>
+                        <p className="text-lg text-blue-600">
+                          Inicio: <span className="font-bold">{new Date(gameStartTime).toLocaleTimeString()}</span>
+                        </p>
+                        <p className="text-lg text-blue-600">
+                          Fin: <span className="font-bold">{new Date().toLocaleTimeString()}</span>
+                        </p>
+                        <p className="text-lg text-blue-600">
+                          Duración: <span className="font-bold">{60 - timeLeft}s</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                      <p className="text-xl font-bold text-red-600">
+                        {timeLeft === 0 ? "⏰ TIEMPO AGOTADO" : "💔 SIN VIDAS"}
+                      </p>
+                      <p className="text-lg text-blue-600">
+                        Categoría:{" "}
+                        <span className="font-bold">
+                          {selectedCategory === "ALL" ? "Todas las Sílabas" : `Sílabas con ${selectedCategory}`}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 mb-6 border border-green-200">
+                    <p className="text-base text-green-700 font-medium">💾 Resultado guardado automáticamente</p>
+                    <p className="text-sm text-green-600">Estadísticas actualizadas en tu perfil</p>
+                  </div>
+                  <div className="space-y-3">
+                    <Button
+                      onClick={restartSyllableGame}
+                      className="bg-gray-700 hover:bg-gray-800 text-white px-8 py-4 text-xl mr-4"
+                    >
+                      🔄 Jugar de Nuevo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentScreen("syllableSelection")}
+                      className="px-6 py-3 text-lg border-gray-300"
+                    >
+                      🎯 Cambiar Categoría
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentScreen("menu")}
+                      className="px-6 py-3 text-lg border-gray-300"
+                    >
+                      🏠 Volver al Menú
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {gameStatus === "completed" && (
+                <div className="bg-green-50 rounded-lg p-8 border border-green-200">
+                  <div className="text-8xl mb-4">🏆</div>
+                  <h3 className="text-3xl font-bold text-green-700 mb-4">¡Felicitaciones!</h3>
+                  <p className="text-xl text-green-600 mb-2">¡Completaste todas las palabras!</p>
+                  <div className="space-y-2 mb-4">
+                    <p className="text-2xl font-bold text-green-700">Puntuación final: {score}</p>
+                    <p className="text-lg text-green-600">Palabras completadas: {filteredWords.length}</p>
+                    <p className="text-lg text-green-600">
+                      Categoría: {selectedCategory === "ALL" ? "Todas las Sílabas" : `Sílabas con ${selectedCategory}`}
+                    </p>
+                  </div>
+                  <p className="text-base text-green-600 mb-4">💾 Guardado automáticamente</p>
+                  <div className="space-y-3">
+                    <Button
+                      onClick={restartSyllableGame}
+                      className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 text-xl mr-4"
+                    >
+                      🔄 Jugar de Nuevo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentScreen("syllableSelection")}
+                      className="px-6 py-3 text-lg border-gray-300"
+                    >
+                      🎯 Cambiar Categoría
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // Sopa de Letras
   if (currentScreen === "wordSearch") {
     if (!wordSearchStarted) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center p-6">
-          <Card className="w-full max-w-2xl text-center shadow-2xl">
-            <CardHeader className="space-y-6">
-              <div className="text-9xl animate-pulse">🔍</div>
-              <CardTitle className="text-5xl font-bold text-purple-700">Sopa de Letras</CardTitle>
-              <p className="text-2xl text-gray-600">Encuentra las palabras ocultas</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+          <Card className="w-full max-w-2xl text-center shadow-lg border border-gray-200">
+            <CardHeader className="space-y-4 bg-white border-b border-gray-100">
+              <div className="text-6xl">🔍</div>
+              <CardTitle className="text-4xl font-bold text-gray-700">Sopa de Letras</CardTitle>
+              <p className="text-xl text-gray-600">Encuentra las palabras ocultas</p>
             </CardHeader>
-            <CardContent className="space-y-10">
-              <div className="bg-blue-50 rounded-xl p-8">
-                <p className="text-2xl text-gray-700 font-medium mb-6">¡Hola {currentUser?.username}! 👋</p>
-                <p className="text-xl text-gray-600 mb-6">Busca estas palabras en la cuadrícula:</p>
-                <div className="flex flex-wrap justify-center gap-4">
-                  {wordsToFind.map((word, index) => (
-                    <Badge key={index} variant="secondary" className="text-lg px-4 py-2 bg-yellow-100 text-yellow-800">
-                      {word}
+            <CardContent className="space-y-8 p-6 bg-white">
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <p className="text-xl text-gray-700 font-medium mb-4">¡Hola {currentUser?.username}! 👋</p>
+                <p className="text-lg text-gray-600 mb-4">Busca estas palabras con sílabas trabadas:</p>
+                <div className="flex flex-wrap justify-center gap-3">
+                  {wordSearchWords.map((word, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className={`text-base px-3 py-1 border border-yellow-300 ${
+                        foundWords.includes(word)
+                          ? "bg-green-100 text-green-800 line-through"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {wordSearchIcons[word]} {word}
                     </Badge>
                   ))}
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-6 text-lg">
-                <div className="bg-green-50 p-6 rounded-lg">
-                  <p className="text-green-700 font-medium">🔍 Busca en la cuadrícula</p>
+              <div className="grid grid-cols-2 gap-4 text-base">
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 font-medium">🔍 Selecciona letras</p>
                 </div>
-                <div className="bg-yellow-50 p-6 rounded-lg">
-                  <p className="text-yellow-700 font-medium">➡️ Horizontal y vertical</p>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 font-medium">➡️ Horizontal, vertical y diagonal</p>
                 </div>
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <p className="text-blue-700 font-medium">🎯 Encuentra todas</p>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 font-medium">🎯 +15 puntos/palabra</p>
                 </div>
-                <div className="bg-purple-50 p-6 rounded-lg">
-                  <p className="text-purple-700 font-medium">⭐ +10 puntos/palabra</p>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 font-medium">❤️ 3 vidas • 🔥 Rachas</p>
                 </div>
               </div>
-
               <Button
                 onClick={() => setWordSearchStarted(true)}
-                className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold py-6 text-2xl transition-all transform hover:scale-105"
+                className="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 text-xl transition-all"
               >
                 ¡Comenzar Búsqueda! 🔍
               </Button>
-
               <Button
                 variant="outline"
                 onClick={() => setCurrentScreen("menu")}
-                className="w-full flex items-center justify-center gap-3 py-4 text-xl"
+                className="w-full flex items-center justify-center gap-2 py-3 text-lg border-gray-300"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4" />
                 Volver al Menú
               </Button>
             </CardContent>
@@ -1389,105 +1803,142 @@ export default function SistemaEducativo() {
     }
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 p-6">
+      <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
-          {/* Header - Tablet */}
-          <Card className="mb-8 shadow-xl">
-            <CardContent className="p-6">
+          {/* Header con puntuación */}
+          <Card className="mb-6 shadow-lg border border-gray-200">
+            <CardContent className="p-4 bg-white">
               <div className="flex justify-between items-center">
-                <h1 className="text-4xl font-bold text-purple-700 flex items-center gap-3">🔍 Sopa de Letras</h1>
-                <div className="text-3xl font-bold text-green-600">Puntos: {wordSearchScore}</div>
+                <h1 className="text-3xl font-bold text-gray-700 flex items-center gap-2">🔍 Sopa de Letras</h1>
+                <div className="flex items-center gap-4">
+                  <div className="text-2xl font-bold text-gray-700">Puntos: {wordSearchScore}</div>
+                  <Badge className="text-lg px-3 py-1 bg-red-100 text-red-700">❤️ {wordSearchLives}</Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-lg px-3 py-1 bg-orange-100 text-orange-700 border-orange-300"
+                  >
+                    🔥 {wordSearchStreak}
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Palabras a encontrar - Tablet */}
-          <Card className="mb-8 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-center text-2xl">🎯 Palabras a encontrar:</CardTitle>
+          {/* Palabras a encontrar */}
+          <Card className="mb-6 shadow-lg border border-gray-200">
+            <CardHeader className="bg-white border-b border-gray-100">
+              <CardTitle className="text-center text-xl text-gray-700">🎯 Palabras a encontrar:</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap justify-center gap-4">
-                {wordsToFind.map((word, index) => (
-                  <Badge
+            <CardContent className="p-4 bg-white">
+              <div className="flex flex-wrap justify-center gap-3">
+                {wordSearchWords.map((word, index) => (
+                  <div
                     key={index}
-                    className={`text-2xl px-6 py-3 transition-all ${
-                      foundWords.includes(word) ? "bg-green-500 text-white animate-pulse" : "bg-gray-200 text-gray-700"
+                    className={`flex items-center gap-2 text-lg px-4 py-2 rounded-lg transition-all duration-300 ${
+                      foundWords.includes(word)
+                        ? "bg-green-500 text-white animate-bounce-in"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                     }`}
                   >
-                    {word} {foundWords.includes(word) ? "✅" : ""}
-                  </Badge>
+                    <span className="text-2xl">{wordSearchIcons[word]}</span>
+                    <span className={foundWords.includes(word) ? "line-through" : ""}>{word}</span>
+                    {foundWords.includes(word) && <span className="animate-bounce-in">✅</span>}
+                  </div>
                 ))}
               </div>
-              <div className="text-center mt-6">
-                <p className="text-lg text-gray-600">
-                  Encontradas: {foundWords.length} de {wordsToFind.length}
+              <div className="text-center mt-4">
+                <p className="text-base text-gray-600">
+                  Encontradas: {foundWords.length} de {wordSearchWords.length}
                 </p>
-                <Progress value={(foundWords.length / wordsToFind.length) * 100} className="mt-4 h-4" />
               </div>
             </CardContent>
           </Card>
 
-          {/* Cuadrícula - Tablet */}
-          <Card className="mb-8 shadow-xl">
-            <CardContent className="p-10">
-              <div className="grid grid-cols-8 gap-2 max-w-2xl mx-auto bg-white p-6 rounded-lg">
-                {grid.map((row, rowIndex) =>
-                  row.map((letter, colIndex) => {
-                    const cellId = `${rowIndex}-${colIndex}`
-                    const isSelected = selectedCells.includes(cellId)
-
-                    return (
-                      <button
-                        key={cellId}
-                        className={`w-16 h-16 border-2 border-gray-300 flex items-center justify-center font-bold text-2xl transition-all duration-200 hover:scale-110 ${
-                          isSelected
-                            ? "bg-blue-500 text-white shadow-lg transform scale-105"
-                            : "bg-gray-50 hover:bg-blue-100 text-gray-800"
-                        }`}
-                        onClick={() => handleCellClick(rowIndex, colIndex)}
-                      >
-                        {letter}
-                      </button>
-                    )
-                  }),
-                )}
+          {/* Cuadrícula de la sopa de letras */}
+          <Card className="mb-6 shadow-lg border border-gray-200">
+            <CardContent className="p-8 bg-white">
+              <div className="flex justify-center">
+                <div className="inline-block bg-white border-4 border-gray-400 rounded-lg p-4 word-search-grid">
+                  <div className="grid grid-cols-[repeat(15,_40px)] gap-1">
+                    {wordSearchGrid.map((row, rowIndex) =>
+                      row.map((letter, colIndex) => {
+                        const cellId = `${rowIndex}-${colIndex}`
+                        const isSelected = selectedCells.includes(cellId)
+                        const isFoundWord = foundWordCells.includes(cellId)
+                        return (
+                          <button
+                            key={cellId}
+                            data-cell-id={cellId}
+                            className={`w-10 h-10 border border-gray-300 flex items-center justify-center font-bold text-lg transition-all duration-200 ${
+                              isFoundWord
+                                ? "bg-green-200 text-green-800 animate-bounce-in"
+                                : isSelected
+                                  ? "bg-blue-200 text-blue-800"
+                                  : "bg-white text-gray-800 hover:bg-gray-100"
+                            }`}
+                            onClick={() => handleCellClick(rowIndex, colIndex)}
+                          >
+                            {letter}
+                          </button>
+                        )
+                      }),
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="text-center mt-8">
-                <p className="text-lg text-gray-600 mb-4">💡 Toca las letras para seleccionarlas</p>
-                <p className="text-sm text-gray-500">Pista: "GATO" está en la primera fila</p>
+              {currentSelection && (
+                <div className="text-center mt-6">
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                    <p className="text-base text-gray-700 font-medium">Palabra seleccionada:</p>
+                    <p className="text-xl font-bold text-gray-800">{currentSelection}</p>
+                  </div>
+                  <Button
+                    onClick={checkWord}
+                    className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 text-lg font-bold"
+                  >
+                    ✅ Verificar Palabra
+                  </Button>
+                </div>
+              )}
+
+              <div className="text-center mt-6">
+                <p className="text-base text-gray-600 mb-1">💡 Selecciona las letras para formar palabras</p>
+                <p className="text-sm text-gray-500">Intentos: {attempts} • Busca horizontal, vertical y diagonal</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Botones - Tablet */}
-          <div className="flex justify-center gap-8">
+          {/* Botones de control */}
+          <div className="flex justify-center gap-6">
             <Button
-              onClick={() => alert('🔍 Pista: Busca "GATO" en la primera fila (G-A-T-O) 😉')}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white px-8 py-4 text-2xl font-medium"
+              onClick={() => {
+                setSelectedCells([])
+                setCurrentSelection("")
+              }}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 text-lg font-medium"
             >
-              💡 Obtener Pista
+              🔄 Limpiar Selección
             </Button>
             <Button
               variant="outline"
               onClick={() => setCurrentScreen("menu")}
-              className="px-8 py-4 text-2xl font-medium"
+              className="px-6 py-3 text-lg font-medium border-gray-300"
             >
-              <ArrowLeft className="w-5 h-5 mr-3" />
+              <ArrowLeft className="w-4 h-4 mr-2" />
               Volver al Menú
             </Button>
           </div>
 
-          {/* Progreso - Tablet */}
-          {foundWords.length === wordsToFind.length && (
-            <Card className="mt-8 bg-green-50 border-green-200">
-              <CardContent className="p-8 text-center">
-                <div className="text-8xl mb-6">🎉</div>
-                <h3 className="text-3xl font-bold text-green-700 mb-4">¡Felicitaciones!</h3>
-                <p className="text-xl text-green-600">¡Encontraste todas las palabras!</p>
-                <p className="text-2xl font-bold text-green-700 mt-4">Puntuación final: {wordSearchScore}</p>
-                <p className="text-sm text-green-600 mt-2">💾 Guardado en almacenamiento local</p>
+          {/* Mensaje de victoria */}
+          {foundWords.length === wordSearchWords.length && (
+            <Card className="mt-6 bg-green-50 border-green-200">
+              <CardContent className="p-6 text-center">
+                <div className="text-6xl mb-4">🎉</div>
+                <h3 className="text-2xl font-bold text-green-700 mb-3">¡Felicitaciones!</h3>
+                <p className="text-lg text-green-600">¡Encontraste todas las palabras!</p>
+                <p className="text-xl font-bold text-green-700 mt-3">Puntuación final: {wordSearchScore}</p>
+                <p className="text-sm text-green-600 mt-1">💾 Guardado en almacenamiento local</p>
               </CardContent>
             </Card>
           )}
@@ -1495,6 +1946,4 @@ export default function SistemaEducativo() {
       </div>
     )
   }
-
-  return null
 }
