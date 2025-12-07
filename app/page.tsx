@@ -266,8 +266,17 @@ export default function SistemaEducativo() {
   // Estados principales
   const [currentScreen, setCurrentScreen] = useState<
     "login" | "register" | "menu" | "syllableGame" | "syllableSelection" | "wordSearch" | "storage"
-  >("login")
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null)
+  >("menu")
+
+  // Usuario por defecto para evitar el login
+  const [currentUser, setCurrentUser] = useState<UserData | null>({
+    username: "Jugador",
+    password: "",
+    email: "guest@udipsai.com",
+    registeredAt: new Date().toISOString(),
+    gamesPlayed: 0,
+    bestScore: 0,
+  })
   const [users, setUsers] = useState<UserData[]>([])
   const [gameSessions, setGameSessions] = useState<GameSession[]>([])
   const [storageInfo, setStorageInfo] = useState<any>(null)
@@ -444,11 +453,18 @@ export default function SistemaEducativo() {
       try {
         await CapacitorPreferences.clear()
         setUsers([])
-        setCurrentUser(null)
+        setCurrentUser({
+          username: "Jugador",
+          password: "",
+          email: "guest@udipsai.com",
+          registeredAt: new Date().toISOString(),
+          gamesPlayed: 0,
+          bestScore: 0,
+        })
         setGameSessions([])
         setStorageInfo(null)
-        setCurrentScreen("login")
-        alert("✅ Almacenamiento limpiado completamente")
+        setCurrentScreen("menu")
+        alert("✅ Almacenamiento limpiado completamente. Sesión reiniciada.")
         console.log("🗑️ Almacenamiento limpiado")
       } catch (error) {
         console.error("❌ Error limpiando almacenamiento:", error)
@@ -802,9 +818,17 @@ export default function SistemaEducativo() {
   }
 
   const handleLogout = async () => {
-    setCurrentUser(null)
+    // En lugar de ir al login, reseteamos a usuario invitado
+    setCurrentUser({
+      username: "Jugador",
+      password: "",
+      email: "guest@udipsai.com",
+      registeredAt: new Date().toISOString(),
+      gamesPlayed: 0,
+      bestScore: 0,
+    })
     await CapacitorPreferences.remove({ key: "current_user" })
-    setCurrentScreen("login")
+    setCurrentScreen("menu")
   }
 
   // Pantalla de información de almacenamiento
@@ -1094,15 +1118,6 @@ export default function SistemaEducativo() {
                     <Database className="w-4 h-4" />
                     Ver Datos
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-2 bg-transparent"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Cerrar Sesión
-                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -1228,9 +1243,8 @@ export default function SistemaEducativo() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* Categorías individuales */}
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "K" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "K" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("K")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1244,9 +1258,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "R" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "R" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("R")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1260,9 +1273,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "D" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "D" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("D")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1276,9 +1288,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "J" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "J" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("J")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1292,9 +1303,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "G" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "G" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("G")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1308,9 +1318,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "GR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "GR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("GR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1324,9 +1333,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "DR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "DR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("DR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1340,9 +1348,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "FR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "FR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("FR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1356,9 +1363,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "CR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "CR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("CR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1372,9 +1378,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "TR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "TR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("TR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1388,9 +1393,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "BR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "BR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("BR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1404,9 +1408,8 @@ export default function SistemaEducativo() {
                 </Card>
 
                 <Card
-                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${
-                    selectedCategory === "PR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
-                  }`}
+                  className={`hover:shadow-md transition-all cursor-pointer border-2 ${selectedCategory === "PR" ? "border-blue-500 bg-blue-50" : "hover:border-blue-300"
+                    }`}
                   onClick={() => setSelectedCategory("PR")}
                 >
                   <CardContent className="p-4 text-center">
@@ -1422,9 +1425,8 @@ export default function SistemaEducativo() {
 
               {/* Opción "Todas las Sílabas" destacada */}
               <Card
-                className={`hover:shadow-lg transition-all cursor-pointer border-4 ${
-                  selectedCategory === "ALL" ? "border-yellow-500 bg-yellow-100" : "border-yellow-300 bg-yellow-50"
-                }`}
+                className={`hover:shadow-lg transition-all cursor-pointer border-4 ${selectedCategory === "ALL" ? "border-yellow-500 bg-yellow-100" : "border-yellow-300 bg-yellow-50"
+                  }`}
                 onClick={() => setSelectedCategory("ALL")}
               >
                 <CardContent className="p-6 text-center">
@@ -1575,15 +1577,14 @@ export default function SistemaEducativo() {
                   <Button
                     key={index}
                     onClick={() => handleSyllableSelect(option)}
-                    className={`h-20 text-3xl font-bold transition-all duration-300 ${
-                      selectedSyllable === option
-                        ? gameStatus === "correct"
-                          ? "bg-green-500 text-white animate-pulse-success"
-                          : gameStatus === "wrong"
-                            ? "bg-red-500 text-white animate-shake"
-                            : "bg-blue-500 text-white"
-                        : "bg-gray-600 hover:bg-gray-700 text-white"
-                    }`}
+                    className={`h-20 text-3xl font-bold transition-all duration-300 ${selectedSyllable === option
+                      ? gameStatus === "correct"
+                        ? "bg-green-500 text-white animate-pulse-success"
+                        : gameStatus === "wrong"
+                          ? "bg-red-500 text-white animate-shake"
+                          : "bg-blue-500 text-white"
+                      : "bg-gray-600 hover:bg-gray-700 text-white"
+                      }`}
                     disabled={gameStatus !== "playing"}
                   >
                     {option}
@@ -1757,11 +1758,10 @@ export default function SistemaEducativo() {
                     <Badge
                       key={index}
                       variant="secondary"
-                      className={`text-base px-3 py-1 border border-yellow-300 ${
-                        foundWords.includes(word)
-                          ? "bg-green-100 text-green-800 line-through"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
+                      className={`text-base px-3 py-1 border border-yellow-300 ${foundWords.includes(word)
+                        ? "bg-green-100 text-green-800 line-through"
+                        : "bg-yellow-100 text-yellow-800"
+                        }`}
                     >
                       {wordSearchIcons[word]} {word}
                     </Badge>
@@ -1834,11 +1834,10 @@ export default function SistemaEducativo() {
                 {wordSearchWords.map((word, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-2 text-lg px-4 py-2 rounded-lg transition-all duration-300 ${
-                      foundWords.includes(word)
-                        ? "bg-green-500 text-white animate-bounce-in"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
+                    className={`flex items-center gap-2 text-lg px-4 py-2 rounded-lg transition-all duration-300 ${foundWords.includes(word)
+                      ? "bg-green-500 text-white animate-bounce-in"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
                   >
                     <span className="text-2xl">{wordSearchIcons[word]}</span>
                     <span className={foundWords.includes(word) ? "line-through" : ""}>{word}</span>
@@ -1869,13 +1868,12 @@ export default function SistemaEducativo() {
                           <button
                             key={cellId}
                             data-cell-id={cellId}
-                            className={`w-10 h-10 border border-gray-300 flex items-center justify-center font-bold text-lg transition-all duration-200 ${
-                              isFoundWord
-                                ? "bg-green-200 text-green-800 animate-bounce-in"
-                                : isSelected
-                                  ? "bg-blue-200 text-blue-800"
-                                  : "bg-white text-gray-800 hover:bg-gray-100"
-                            }`}
+                            className={`w-10 h-10 border border-gray-300 flex items-center justify-center font-bold text-lg transition-all duration-200 ${isFoundWord
+                              ? "bg-green-200 text-green-800 animate-bounce-in"
+                              : isSelected
+                                ? "bg-blue-200 text-blue-800"
+                                : "bg-white text-gray-800 hover:bg-gray-100"
+                              }`}
                             onClick={() => handleCellClick(rowIndex, colIndex)}
                           >
                             {letter}
